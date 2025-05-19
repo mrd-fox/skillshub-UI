@@ -10,7 +10,7 @@ function App() {
         <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
             <BrowserRouter>
                 <Routes>
-                    <Route path="/creer-cours" element={<CreateCoursePage  />} />
+                    <Route path="/course" element={<CreateCoursePage  />} />
                     {/* autres routes */}
                 </Routes>
             </BrowserRouter>

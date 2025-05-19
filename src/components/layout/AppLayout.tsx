@@ -1,7 +1,8 @@
 // src/components/layout/AppLayout.tsx
 import { ReactNode } from "react";
-import {Header} from "@/components/layout/Header.tsx";
+
 import {Footer} from "@/components/layout/Footer.tsx";
+import Header from "@/components/layout/Header.tsx";
 
 
 

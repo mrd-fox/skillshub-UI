@@ -47,9 +47,9 @@ export default function CreateCourseForm() {
         }
 
         try {
-            const response = await api.post("/course", payload);
+            await api.post("/course", payload);
             setSuccess("Cours créé avec succès !");
-        } catch (err: any) {
+        } catch (err: Error | any ) {
             setGeneralError(err.message);
         }
     };

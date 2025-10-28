@@ -1,35 +1,60 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
 import './App.css'
+import {BrowserRouter, Navigate, Route, Routes} from "react-router-dom";
+import {ThemeProvider} from "@/components/ThemeProvider.tsx";
+import CreateCoursePage from "@/pages/CreateCoursePage.tsx";
+import {AppLayout} from "@/layout/AppLayout.tsx";
+import {useEffect, useState} from "react";
+import HomePage from "@/pages/HomePage.tsx";
+import UnauthorizedPage from "@/pages/UnautorizedPage.tsx";
+import {useAuth} from "@/context/AuthContext.tsx";
+import ProtectedRoute from "@/routes/ProtectedRoute.tsx";
+
 
 function App() {
-  const [count, setCount] = useState(0)
+    const {keycloak, ready} = useAuth();
+    const [isAuthenticated, setIsAuthenticated] = useState(!!keycloak.authenticated);
 
-  return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    useEffect(() => {
+        const updateAuth = () => setIsAuthenticated(!!keycloak.authenticated);
+        keycloak.onAuthSuccess = updateAuth;
+        keycloak.onAuthLogout = updateAuth;
+
+        const refresh = setInterval(() => {
+            if (keycloak.authenticated) {
+                keycloak
+                    .updateToken(60)
+                    .then(refreshed => {
+                        if (refreshed) console.debug("🔁 Token refreshed");
+                    })
+                    .catch(err => console.error("⚠️ Token refresh failed", err));
+            }
+        }, 60000);
+
+        return () => clearInterval(refresh);
+    }, [keycloak]);
+
+
+    return (
+        <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
+            <BrowserRouter>
+                <Routes>
+                    <Route element={<AppLayout/>}>
+                        <Route path="/" element={<HomePage/>}/>
+                        <Route
+                            path="/course"
+                            element={
+                                <ProtectedRoute requiredRoles={["TUTOR"]}>
+                                    <CreateCoursePage/>
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route path="/unauthorized" element={<UnauthorizedPage/>}/>
+                    </Route>
+                    <Route path="*" element={<Navigate to="/" replace/>}/>
+                </Routes>
+            </BrowserRouter>
+        </ThemeProvider>
+    );
 }
 
-export default App
+export default App;

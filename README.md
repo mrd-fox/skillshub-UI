@@ -1,99 +1,174 @@
-[//]: # (l# React + TypeScript + Vite)
+# Skillshub Frontend – Docker Execution Guide
 
-[//]: # ()
-[//]: # (This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.)
+This document describes how to run the **Skillshub Frontend** using Docker, depending on where the **Gateway** service
+is executed.  
+It provides two Docker Compose configurations for local development and full Docker integration.
 
-[//]: # ()
-[//]: # (Currently, two official plugins are available:)
+---
 
-[//]: # ()
-[//]: # (- [@vitejs/plugin-react]&#40;https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md&#41; uses [Babel]&#40;https://babeljs.io/&#41; for Fast Refresh)
+## 1. Overview
 
-[//]: # (- [@vitejs/plugin-react-swc]&#40;https://github.com/vitejs/vite-plugin-react-swc&#41; uses [SWC]&#40;https://swc.rs/&#41; for Fast Refresh)
+The frontend is always executed inside a Docker container.  
+Only the Gateway location changes depending on the development mode.
 
-[//]: # ()
-[//]: # (## Expanding the ESLint configuration)
+| Mode                    | Frontend | Gateway   | Keycloak | Typical Use                                       |
+|-------------------------|----------|-----------|----------|---------------------------------------------------|
+| **Local Gateway Mode**  | Docker   | Localhost | Docker   | Debugging the Gateway locally                     |
+| **Docker Gateway Mode** | Docker   | Docker    | Docker   | Full integration testing on shared Docker network |
 
-[//]: # ()
-[//]: # (If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:)
+---
 
-[//]: # ()
-[//]: # (```js)
+## 2. Folder Structure
 
-[//]: # (export default tseslint.config&#40;{)
+```
+frontend/
+│
+├─ docker-compose.local.yml
+├─ docker-compose.docker.yml
+├─ Dockerfile.dev
+└─ env/
+   └─ dev/
+       ├─ local-gateway.env
+       └─ docker-gateway.env
+```
 
-[//]: # (  extends: [)
+Each mode uses its own `.env` file located under `env/dev/`.  
+These files define runtime variables.
 
-[//]: # (    // Remove ...tseslint.configs.recommended and replace with this)
+---
 
-[//]: # (    ...tseslint.configs.recommendedTypeChecked,)
+## 3. Prerequisites
 
-[//]: # (    // Alternatively, use this for stricter rules)
+Before starting the containers, ensure the shared Docker network exists.  
+This network is required when the Gateway also runs in Docker.
 
-[//]: # (    ...tseslint.configs.strictTypeChecked,)
+if required network doesn't created execute this
 
-[//]: # (    // Optionally, add this for stylistic rules)
+```bash
+docker network create skillshub-net
+```
 
-[//]: # (    ...tseslint.configs.stylisticTypeChecked,)
+You can check existing networks with:
 
-[//]: # (  ],)
+```bash
+docker network ls
+```
 
-[//]: # (  languageOptions: {)
+---
 
-[//]: # (    // other options...)
+## 4. Execution Modes
 
-[//]: # (    parserOptions: {)
+### 4.1 Local Gateway Mode
 
-[//]: # (      project: ['./tsconfig.node.json', './tsconfig.app.json'],)
+In this mode, the frontend runs in Docker, while the Gateway runs locally on the host machine.
 
-[//]: # (      tsconfigRootDir: import.meta.dirname,)
+**Purpose:**  
+Use this configuration when actively debugging or modifying the Gateway code on localhost.
 
-[//]: # (    },)
+**Command:**
 
-[//]: # (  },)
+```bash
+docker compose -f docker-compose.local.yml up --build
+```
 
-[//]: # (}&#41;)
+**Compose file:**  
+`docker-compose.local.yml`  
+This configuration does not attach the container to the shared Docker network.
 
-[//]: # (```)
+---
 
-[//]: # ()
-[//]: # (You can also install [eslint-plugin-react-x]&#40;https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x&#41; and [eslint-plugin-react-dom]&#40;https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom&#41; for React-specific lint rules:)
+### 4.2 Docker Gateway Mode
 
-[//]: # ()
-[//]: # (```js)
+In this mode, both the frontend and the Gateway run inside Docker and communicate through the shared network
+`skillshub-net`.
 
-[//]: # (// eslint.config.js)
+**Purpose:**  
+Use this configuration for end-to-end testing or integration validation in a full Docker environment.
 
-[//]: # (import reactX from 'eslint-plugin-react-x')
+**Command:**
 
-[//]: # (import reactDom from 'eslint-plugin-react-dom')
+```bash
+docker compose -f docker-compose.docker.yml up --build
+```
 
-[//]: # ()
-[//]: # (export default tseslint.config&#40;{)
+**Compose file:**  
+`docker-compose.docker.yml`  
+This configuration attaches the frontend container to the shared `skillshub-net` network.
 
-[//]: # (  plugins: {)
+---
 
-[//]: # (    // Add the react-x and react-dom plugins)
+## 5. Stopping Containers
 
-[//]: # (    'react-x': reactX,)
+To stop and remove running containers:
 
-[//]: # (    'react-dom': reactDom,)
+```bash
+docker compose -f docker-compose.local.yml down
+# or
+docker compose -f docker-compose.docker.yml down
+```
 
-[//]: # (  },)
+If you need to clean up all unused containers, networks, and images:
 
-[//]: # (  rules: {)
+```bash
+docker system prune -f
+```
 
-[//]: # (    // other rules...)
+---
 
-[//]: # (    // Enable its recommended typescript rules)
+## 6. Summary
 
-[//]: # (    ...reactX.configs['recommended-typescript'].rules,)
+| Mode           | Compose File                | Network           | Use Case                        |
+|----------------|-----------------------------|-------------------|---------------------------------|
+| Local Gateway  | `docker-compose.local.yml`  | None (local only) | Debug Gateway locally           |
+| Docker Gateway | `docker-compose.docker.yml` | `skillshub-net`   | Run full integrated environment |
 
-[//]: # (    ...reactDom.configs.recommended.rules,)
+---
 
-[//]: # (  },)
+## 7. Troubleshooting
 
-[//]: # (}&#41;)
+### Network not found
 
-[//]: # (```)
+If you see an error like:
 
+```
+Error: network skillshub-net not found
+```
+
+Create it manually:
+
+```bash
+docker network create skillshub-net
+```
+
+### Port already in use
+
+If you encounter:
+
+```
+Bind for 0.0.0.0:5173 failed: port is already allocated
+```
+
+Stop the process using that port or change the exposed port in your `docker-compose` file.
+
+### Environment variables not applied
+
+Ensure each compose file correctly references the appropriate `.env` file under `env/dev/`.  
+You can verify active environment variables inside the container with:
+
+```bash
+docker exec -it skillshub-front-dev printenv
+```
+
+---
+
+## 8. Notes
+
+- The `.env` files are only used to define runtime URLs and environment context.
+- Do **not** store credentials or tokens in these files.
+- Both Docker Compose configurations can coexist in the same repository for easy switching between modes.
+- This setup ensures predictable, isolated frontend behavior in both local and full Docker environments.
+
+---
+
+**Maintained by:** Skillshub Project  
+**Last Updated:** November 2025

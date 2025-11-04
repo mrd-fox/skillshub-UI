@@ -1,15 +1,10 @@
-version: "3.9"
-
 services:
   skillshub-front:
     build:
       context: .
-      args:
-        VITE_KEYCLOAK_URL: "http://localhost:8080"
-        VITE_KEYCLOAK_REALM: "skillshub"
-        VITE_KEYCLOAK_CLIENT_ID: "gateway-service"
-        VITE_API_URL: "http://localhost:8081/api"
-    ports:
-      - "5173:80"
     container_name: skillshub-front
     restart: unless-stopped
+    ports:
+      - "5173:80"
+    env_file:
+      - ./env/dev/local-gateway.env

@@ -1,20 +1,27 @@
-version: "3.9"
-
+networks:
+  skillshub-net:
+    external: true
 services:
   skillshub-front-dev:
     build:
       context: .
       dockerfile: Dockerfile.dev
+
     container_name: skillshub-front-dev
+
     working_dir: /app
+
     volumes:
       - .:/app
       - /app/node_modules
+
     ports:
       - "5173:5173"
-    environment:
-      - VITE_KEYCLOAK_URL=http://localhost:8080
-      - VITE_KEYCLOAK_REALM=skillshub
-      - VITE_KEYCLOAK_CLIENT_ID=frontend-skillshub
-      - VITE_API_URL=http://localhost:10020/api
+
+    env_file:
+      - ./env/dev/docker-gateway.env
+
     command: [ "npm", "run", "dev" ]
+
+    networks:
+      - skillshub-net

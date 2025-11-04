@@ -1,6 +1,6 @@
 // lib/axios.ts
 import axios from "axios";
-import keycloak from "@/lib/keycloak";
+import keycloakSingleton from "@/lib/KeycloakSingleton.ts";
 
 // const api = axios.create({
 //     baseURL: "http://localhost:10020",
@@ -32,21 +32,41 @@ const api = axios.create({
 });
 
 // Add an interceptor to automatically inject the token
-api.interceptors.request.use(async (config) => {
-    // Ensure the token is still valid
-    const isTokenValid = await keycloak.updateToken(30).catch(() => false);
+api.interceptors.request.use(
+    async (config) => {
+        // Attendre que Keycloak soit initialisé
+        if (!keycloakSingleton.__initialized) {
+            console.warn("⏳ Waiting for Keycloak initialization...");
+            // Attend 300ms (petit délai) avant retry
+            await new Promise((r) => setTimeout(r, 300));
+        }
 
-    if (!isTokenValid) {
-        console.warn("⛔ Token expired, redirecting to login");
-        keycloak.login();
-        throw new axios.Cancel("Token expired");
-    }
+        // Rafraîchit le token si proche de l’expiration
+        try {
+            const refreshed = await keycloakSingleton.updateToken(30);
+            if (refreshed) {
+                console.debug("🔁 Token refreshed successfully");
+            } else {
+                console.debug("✅ Token still valid, no refresh needed");
+            }
+        } catch (err) {
+            console.warn("⛔ Token refresh failed, redirecting to login...");
+            keycloakSingleton.login();
+            throw new axios.Cancel("Token refresh failed");
+        }
 
-    if (keycloak.token) {
-        config.headers.Authorization = `Bearer ${keycloak.token}`;
-    }
-
-    return config;
-});
+        // Ajoute le token dans les headers
+        if (keycloakSingleton.token) {
+            console.log("🔑 Token prêt à être envoyé:", keycloakSingleton.token);
+            config.headers.Authorization = `Bearer ${keycloakSingleton.token}`;
+        } else {
+            console.warn("⚠️ No token found in Keycloak instance.");
+        }
+        console.log("📡 Final URL:", `${config.baseURL}${config.url}`);
+        console.log("🧾 Headers envoyés:", config.headers);
+        return config;
+    },
+    (error) => Promise.reject(error)
+);
 
 export default api;

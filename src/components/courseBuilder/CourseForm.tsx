@@ -1,6 +1,8 @@
+import api from "@/lib/axios";
 import {useEffect, useState} from "react";
-import api from "@/lib/axios.ts";
 import {z} from "zod";
+import keycloakSingleton from "@/lib/KeycloakSingleton.ts";
+import axios from "axios";
 
 const courseSchema = z.object({
     title: z.string().min(3, "Le titre est requis (min 3 caractères)"),
@@ -47,11 +49,25 @@ export default function CreateCourseForm() {
         }
 
         try {
+            console.log("-----------------", JSON.stringify(payload), `${api.getUri()}`);
+
+            // 🧩 Ajoute ici tes logs de debug
+            console.log("🚀 Keycloak initialized?", keycloakSingleton.__initialized);
+            console.log("🕓 Authenticated:", keycloakSingleton.authenticated);
+            console.log("🔑 Token actuel:", keycloakSingleton.token);
+
+            // 👉 Appel réel (décommente pour tester)
             await api.post("/course", payload);
             setSuccess("Cours créé avec succès !");
         } catch (err: Error | any) {
+            if (axios.isCancel(err)) {
+                console.warn("🚫 Request canceled:", err.message);
+            } else {
+                console.error("🔥 API error:", err);
+            }
             setGeneralError(err.message);
         }
+
     };
 
     return (

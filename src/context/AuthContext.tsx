@@ -26,10 +26,10 @@ export function AuthProvider({children}: { children: ReactNode }) {
     useEffect(() => {
         // 🧩 Avoid multiple Keycloak init calls
         // @ts-ignore
-        if (keycloakSingleton.__initialized) {
+        if (keycloakSingleton.__initialized && keycloakSingleton.isAuthenticated) {
             console.debug("⚠️ Keycloak déjà initialisé — skip init");
             setReady(true);
-            setIsAuthenticated(!!keycloakSingleton.authenticated);
+            setIsAuthenticated(true);
 
             if (keycloakSingleton.tokenParsed) {
                 const parsed = keycloakSingleton.tokenParsed as any;
@@ -38,55 +38,56 @@ export function AuthProvider({children}: { children: ReactNode }) {
                 console.log("🎭 Roles extraits depuis le token:", realmRoles);
             }
 
-            if (keycloakSingleton.authenticated) {
-                keycloakSingleton.loadUserProfile()
-                    .then(setUserProfile)
-                    .catch((err) => console.error("⚠️ Failed to load profile:", err));
-            }
+            // if (keycloakSingleton.authenticated) {
+            keycloakSingleton.loadUserProfile()
+                .then(setUserProfile)
+                .catch((err) => console.error("⚠️ Failed to load profile:", err));
+            // }
 
-            // ⛔ Important: Stop here!
-            return;
+            const refresh = setInterval(async () => {
+                if (!keycloakSingleton.authenticated) return;
+                try {
+                    const refreshed = await keycloakSingleton.updateToken(60);
+                    if (refreshed) console.debug("🔁 Token refreshed successfully");
+                } catch (err) {
+                    console.error("⛔ Token refresh failed, redirecting to login");
+                    keycloakSingleton.login();
+                }
+            }, 60000);
+
+            return () => clearInterval(refresh);
         }
 
-        // @ts-ignore
-        keycloakSingleton.__initialized = true;
-
-        keycloakSingleton
-            .init({
-                onLoad: "check-sso",
-                pkceMethod: "S256",
-                checkLoginIframe: false,
-                silentCheckSsoRedirectUri: window.location.origin + "/silent-check-sso.html",
-            })
-            .then(async (authenticated) => {
-
+        keycloakSingleton.init({
+            onLoad: "check-sso",
+            pkceMethod: "S256",
+            silentCheckSsoRedirectUri: window.location.origin + "/silent-check-sso.html",
+        })
+            .then((authenticated) => {
+                console.log("🔐 Keycloak init terminé. Authenticated:", authenticated);
+                keycloakSingleton.__initialized = true; // ✅ placé ici uniquement après succès
                 setIsAuthenticated(authenticated);
-                console.log("🪙 Token complet déchiffré:", keycloakSingleton.tokenParsed);
-                if (keycloakSingleton.tokenParsed) {
-                    const parsed = keycloakSingleton.tokenParsed as any;
-                    const realmRoles = parsed?.realm_access?.roles || [];
-                    console.log(realmRoles)
-                    setRoles(realmRoles);
-                }
 
                 if (authenticated) {
-                    try {
-                        const profile = await keycloakSingleton.loadUserProfile();
-                        setUserProfile(profile);
-                    } catch (err) {
-                        console.error("⚠️ Failed to load Keycloak profile:", err);
-                    }
+                    keycloakSingleton.loadUserProfile()
+                        .then(setUserProfile)
+                        .catch(err => console.error("⚠️ Failed to load profile:", err));
                 }
+                const parsed = keycloakSingleton.tokenParsed as any;
+                const realmRoles = parsed?.realm_access?.roles || [];
+                console.log("roles => ", realmRoles);
+                setRoles(realmRoles);
 
-                // ✅ Only set ready TRUE here
-                setReady(true);
             })
-            .catch((err) => {
-                console.error("❌ Keycloak init error:", err);
-                setReady(true); // still mark ready to avoid blocking UI
+            .catch(err => {
+                console.error("❌ Keycloak init failed:", err)
+                keycloakSingleton.__initialized = false;
+            })
+            .finally(() => {
+                setReady(true)
             });
 
-        // 🕐 Token refresh loop
+        // 🕐 Boucle de refresh
         const refresh = setInterval(async () => {
             if (!keycloakSingleton.authenticated) return;
             try {
@@ -94,9 +95,11 @@ export function AuthProvider({children}: { children: ReactNode }) {
                 if (refreshed) console.debug("🔁 Token refreshed successfully");
             } catch (err) {
                 console.error("⛔ Token refresh failed, redirecting to login");
+                keycloakSingleton.login();
             }
         }, 60000);
 
+        // 🧹 Nettoyage au démontage
         return () => clearInterval(refresh);
     }, []);
 

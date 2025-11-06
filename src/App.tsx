@@ -1,13 +1,9 @@
 import './App.css'
-import {BrowserRouter, Navigate, Route, Routes} from "react-router-dom";
+import {BrowserRouter} from "react-router-dom";
 import {ThemeProvider} from "@/components/ThemeProvider.tsx";
-import CreateCoursePage from "@/pages/CreateCoursePage.tsx";
-import {AppLayout} from "@/layout/AppLayout.tsx";
 import {useEffect, useState} from "react";
-import HomePage from "@/pages/HomePage.tsx";
-import UnauthorizedPage from "@/pages/UnautorizedPage.tsx";
 import {useAuth} from "@/context/AuthContext.tsx";
-import ProtectedRoute from "@/routes/ProtectedRoute.tsx";
+import {AppRoutes} from "@/routes";
 
 
 function App() {
@@ -37,21 +33,7 @@ function App() {
     return (
         <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
             <BrowserRouter>
-                <Routes>
-                    <Route element={<AppLayout/>}>
-                        <Route path="/" element={<HomePage/>}/>
-                        <Route
-                            path="/course"
-                            element={
-                                <ProtectedRoute requiredRoles={["TUTOR"]}>
-                                    <CreateCoursePage/>
-                                </ProtectedRoute>
-                            }
-                        />
-                        <Route path="/unauthorized" element={<UnauthorizedPage/>}/>
-                    </Route>
-                    <Route path="*" element={<Navigate to="/" replace/>}/>
-                </Routes>
+                <AppRoutes/>
             </BrowserRouter>
         </ThemeProvider>
     );

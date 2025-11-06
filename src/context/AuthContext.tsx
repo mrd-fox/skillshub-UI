@@ -8,6 +8,8 @@ export interface AuthContextType {
     isAuthenticated: boolean;
     userProfile: KeycloakProfile | null;
     roles: string[];
+    activeRole: string | null;
+    setActiveRole: (role: string | null) => void;
     ready: boolean;
     login: () => void;
     logout: () => void;
@@ -22,6 +24,7 @@ export function AuthProvider({children}: { children: ReactNode }) {
     const [userProfile, setUserProfile] = useState<KeycloakProfile | null>(null);
     const [ready, setReady] = useState(false);
     const [roles, setRoles] = useState<string[]>([]);
+    const [activeRole, setActiveRole] = useState<string | null>(null);
 
     useEffect(() => {
         // 🧩 Avoid multiple Keycloak init calls
@@ -42,8 +45,8 @@ export function AuthProvider({children}: { children: ReactNode }) {
             keycloakSingleton.loadUserProfile()
                 .then(setUserProfile)
                 .catch((err) => console.error("⚠️ Failed to load profile:", err));
-            // }
 
+            //todo refresh tocken more long
             const refresh = setInterval(async () => {
                 if (!keycloakSingleton.authenticated) return;
                 try {
@@ -115,12 +118,14 @@ export function AuthProvider({children}: { children: ReactNode }) {
             userProfile,
             roles,
             ready,
+            activeRole,
+            setActiveRole,
             login,
             logout,
             register,
             refreshToken,
         }),
-        [isAuthenticated, userProfile, roles, ready]
+        [isAuthenticated, userProfile, roles, ready, activeRole]
     );
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -4,6 +4,8 @@ import {ThemeProvider} from "@/components/ThemeProvider.tsx";
 import {useEffect, useState} from "react";
 import {useAuth} from "@/context/AuthContext.tsx";
 import {AppRoutes} from "@/routes";
+import {Toaster} from "sonner";
+import {AuthRedirector} from "@/components/auth/AuthRedirector.tsx";
 
 
 function App() {
@@ -33,7 +35,9 @@ function App() {
     return (
         <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
             <BrowserRouter>
+                <AuthRedirector/>
                 <AppRoutes/>
+                <Toaster richColors position="top-right"/> {/* ✅ nécessaire */}
             </BrowserRouter>
         </ThemeProvider>
     );

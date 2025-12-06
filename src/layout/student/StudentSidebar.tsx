@@ -2,7 +2,7 @@
 import {NavLink, useLocation} from "react-router-dom";
 import {BookOpen, Heart, LayoutDashboard, LogOut, Settings, User,} from "lucide-react";
 import {Button} from "@/components/ui/button";
-import {Avatar, AvatarFallback, AvatarImage} from "@/components/ui/avatar";
+import {Avatar, AvatarFallback} from "@/components/ui/avatar";
 import {motion} from "framer-motion";
 import {useAuth} from "@/context/AuthContext";
 
@@ -11,10 +11,18 @@ import {useAuth} from "@/context/AuthContext";
  * Animated sidebar with avatar, menu, and logout.
  */
 export default function StudentSidebar() {
-    const {userProfile, logout} = useAuth();
+
+    const {
+        internalUser,
+        logout
+    } = useAuth();
+
     const location = useLocation();
+
     const initials =
-        (userProfile?.firstName?.[0] || "") + (userProfile?.lastName?.[0] || "");
+        internalUser?.email
+            ? internalUser.email.substring(0, 2).toUpperCase()
+            : "ST";
 
     const navItems = [
         {to: "/dashboard/student", label: "Dashboard", icon: LayoutDashboard},
@@ -26,21 +34,23 @@ export default function StudentSidebar() {
 
     return (
         <aside className="hidden md:flex flex-col w-64 bg-white border-r border-gray-200 shadow-sm relative">
+
             {/* 👤 Student info */}
             <div className="flex items-center gap-3 px-6 py-5 border-b bg-gray-50">
                 <Avatar className="w-10 h-10">
-                    <AvatarImage src={(userProfile?.attributes as any)?.avatarUrl?.[0]}/>
-                    <AvatarFallback>{initials || "ST"}</AvatarFallback>
+                    <AvatarFallback>{initials}</AvatarFallback>
                 </Avatar>
                 <div className="flex flex-col">
-          <span className="text-sm font-semibold text-gray-800">
-            {userProfile?.firstName || "Student"}
-          </span>
-                    <span className="text-xs text-gray-500">Learner</span>
+                    <span className="text-sm font-semibold text-gray-800">
+                        {internalUser?.email ?? "Student"}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                        Learner
+                    </span>
                 </div>
             </div>
 
-            {/* 🧭 Navigation links */}
+            {/* 🧭 Navigation */}
             <nav className="flex-1 px-3 py-4 space-y-1 relative">
                 {navItems.map(({to, label, icon: Icon}) => {
                     const isActive = location.pathname === to;
@@ -69,7 +79,7 @@ export default function StudentSidebar() {
                 })}
             </nav>
 
-            {/* 🚪 Logout button */}
+            {/* 🚪 Logout */}
             <div className="p-4 border-t mt-auto">
                 <Button
                     variant="outline"
@@ -80,6 +90,7 @@ export default function StudentSidebar() {
                     Logout
                 </Button>
             </div>
+
         </aside>
     );
 }

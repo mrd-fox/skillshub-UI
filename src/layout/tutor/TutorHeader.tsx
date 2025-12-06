@@ -4,7 +4,7 @@ import {useNavigate} from "react-router-dom";
 import {Button} from "@/components/ui/button";
 import {GraduationCap, LogOut, User} from "lucide-react";
 import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,} from "@/components/ui/dropdown-menu";
-import {Avatar, AvatarFallback, AvatarImage} from "@/components/ui/avatar";
+import {Avatar, AvatarFallback} from "@/components/ui/avatar";
 
 /**
  * TutorHeader component
@@ -12,16 +12,22 @@ import {Avatar, AvatarFallback, AvatarImage} from "@/components/ui/avatar";
  * and compact user dropdown.
  */
 export default function TutorHeader() {
-    const {userProfile, roles, logout} = useAuth();
-    const navigate = useNavigate();
-    const {setActiveRole} = useAuth();
+    const {
+        internalUser,
+        roles,
+        logout,
+        setActiveRole
+    } = useAuth();
 
+    const navigate = useNavigate();
 
     const hasStudentRole = roles.includes("STUDENT");
-    const initials =
-        (userProfile?.firstName?.[0] || "") + (userProfile?.lastName?.[0] || "");
 
-    // 🔁 Redirect to student dashboard when switching role
+    const initials =
+        internalUser?.email
+            ? internalUser.email.substring(0, 2).toUpperCase()
+            : "TU";
+
     const handleSwitchToStudent = () => {
         setActiveRole("STUDENT");
         navigate("/dashboard/student");
@@ -29,13 +35,12 @@ export default function TutorHeader() {
 
     return (
         <header className="flex items-center justify-between px-6 py-3 border-b bg-white shadow-sm">
-            {/* Left side */}
             <h1 className="text-lg font-semibold text-gray-800">
                 Tutor Dashboard
             </h1>
 
             <div className="flex items-center gap-3">
-                {/* 🔁 Role switch button */}
+
                 {hasStudentRole && (
                     <Button
                         variant="outline"
@@ -48,21 +53,20 @@ export default function TutorHeader() {
                     </Button>
                 )}
 
-                {/* 👤 User dropdown */}
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <button className="flex items-center gap-2 p-1 rounded-full hover:bg-gray-100 transition">
                             <Avatar className="w-8 h-8">
-                                <AvatarImage src={(userProfile?.attributes as any)?.avatarUrl?.[0]}/>
-                                <AvatarFallback>{initials || "TU"}</AvatarFallback>
+                                <AvatarFallback>{initials}</AvatarFallback>
                             </Avatar>
                         </button>
                     </DropdownMenuTrigger>
 
                     <DropdownMenuContent align="end" className="w-44">
                         <DropdownMenuItem disabled className="text-gray-500 text-sm">
-                            {userProfile?.firstName} {userProfile?.lastName}
+                            {internalUser?.email}
                         </DropdownMenuItem>
+
                         <DropdownMenuItem
                             onClick={() => navigate("/dashboard/tutor/settings")}
                             className="flex items-center gap-2"
@@ -70,9 +74,10 @@ export default function TutorHeader() {
                             <User className="w-4 h-4"/>
                             Profile
                         </DropdownMenuItem>
+
                         <DropdownMenuItem
                             onClick={logout}
-                            className="flex items-center gap-2 text-red-600 focus:text-red-700"
+                            className="flex items-center gap-2 text-red-600"
                         >
                             <LogOut className="w-4 h-4"/>
                             Logout

@@ -4,7 +4,7 @@ import {useNavigate} from "react-router-dom";
 import {Button} from "@/components/ui/button";
 import {LogOut, School, User} from "lucide-react";
 import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,} from "@/components/ui/dropdown-menu";
-import {Avatar, AvatarFallback, AvatarImage} from "@/components/ui/avatar";
+import {Avatar, AvatarFallback} from "@/components/ui/avatar";
 import {useTutorPromotion} from "@/hooks/useTutorPromotion";
 import {useState} from "react";
 import {TutorRequestDialog} from "@/components/tutor/TutorRequestDialog";
@@ -16,24 +16,27 @@ import {TutorRequestDialog} from "@/components/tutor/TutorRequestDialog";
  * Otherwise, it opens a confirmation dialog to create tutor profile.
  */
 export default function StudentHeader() {
-    const {userProfile, roles, logout, setActiveRole} = useAuth();
+    const {
+        internalUser,
+        logout,
+        setActiveRole
+    } = useAuth();
+
     const navigate = useNavigate();
     const {promoteToTutor} = useTutorPromotion();
 
-    // 🧩 Local UI state
     const [dialogOpen, setDialogOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<"success" | "error" | null>(null);
 
+    const roles = internalUser?.roles ?? [];
     const hasTutorRole = roles.includes("TUTOR");
-    const initials =
-        (userProfile?.firstName?.[0] || "") + (userProfile?.lastName?.[0] || "");
 
-    /**
-     * Handles click on "Teach on Skillhub"
-     * If user has TUTOR → switch directly
-     * Otherwise → open modal
-     */
+    const initials =
+        internalUser?.email
+            ? internalUser.email.substring(0, 2).toUpperCase()
+            : "ST";
+
     const handleSwitchToTutor = () => {
         if (hasTutorRole) {
             setActiveRole("TUTOR");
@@ -43,10 +46,6 @@ export default function StudentHeader() {
         }
     };
 
-    /**
-     * Handles user confirmation inside TutorRequestDialog.
-     * Keeps dialog open while processing and displays result.
-     */
     const handleConfirmPromotion = async () => {
         setLoading(true);
         setResult(null);
@@ -57,11 +56,13 @@ export default function StudentHeader() {
         if (success) {
             setResult("success");
 
-            // ✅ Small delay before redirection so user sees confirmation
+            // Update active role
+            setActiveRole("TUTOR");
+
             setTimeout(() => {
                 setDialogOpen(false);
                 navigate("/dashboard/tutor");
-            }, 1500);
+            }, 1200);
         } else {
             setResult("error");
         }
@@ -72,43 +73,32 @@ export default function StudentHeader() {
             <h1 className="text-lg font-semibold text-gray-800">Student Dashboard</h1>
 
             <div className="flex items-center gap-3">
-                {/* 🔹 Teach button always visible (even if not yet TUTOR) */}
+
                 <Button
                     variant="outline"
                     size="sm"
-                    className="flex items-center gap-2"
                     onClick={handleSwitchToTutor}
                     disabled={loading}
+                    className="flex items-center gap-2"
                 >
-                    {loading ? (
-                        <span className="flex items-center gap-2 text-blue-600">
-              <School className="w-4 h-4 animate-pulse"/> Processing...
-            </span>
-                    ) : (
-                        <>
-                            <School className="w-4 h-4"/>
-                            Teach on Skillhub
-                        </>
-                    )}
+                    <School className="w-4 h-4"/>
+                    {loading ? "Processing..." : "Teach on Skillhub"}
                 </Button>
 
-                {/* 🔸 Profile dropdown */}
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <button className="flex items-center gap-2 p-1 rounded-full hover:bg-gray-100 transition">
                             <Avatar className="w-8 h-8">
-                                <AvatarImage
-                                    src={(userProfile?.attributes as any)?.avatarUrl?.[0]}
-                                />
-                                <AvatarFallback>{initials || "ST"}</AvatarFallback>
+                                <AvatarFallback>{initials}</AvatarFallback>
                             </Avatar>
                         </button>
                     </DropdownMenuTrigger>
 
                     <DropdownMenuContent align="end" className="w-44">
                         <DropdownMenuItem disabled className="text-gray-500 text-sm">
-                            {userProfile?.firstName} {userProfile?.lastName}
+                            {internalUser?.email}
                         </DropdownMenuItem>
+
                         <DropdownMenuItem
                             onClick={() => navigate("/dashboard/student/profile")}
                             className="flex items-center gap-2"
@@ -116,9 +106,10 @@ export default function StudentHeader() {
                             <User className="w-4 h-4"/>
                             Profile
                         </DropdownMenuItem>
+
                         <DropdownMenuItem
                             onClick={logout}
-                            className="flex items-center gap-2 text-red-600 focus:text-red-700"
+                            className="flex items-center gap-2 text-red-600"
                         >
                             <LogOut className="w-4 h-4"/>
                             Logout
@@ -127,7 +118,6 @@ export default function StudentHeader() {
                 </DropdownMenu>
             </div>
 
-            {/* 🧩 Tutor creation modal */}
             <TutorRequestDialog
                 open={dialogOpen}
                 onOpenChange={setDialogOpen}

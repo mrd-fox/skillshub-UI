@@ -4,19 +4,26 @@ import {BookOpen, LayoutDashboard, LogOut, PlusCircle, Settings, Users,} from "l
 import {useAuth} from "@/context/AuthContext";
 import {Button} from "@/components/ui/button";
 import {motion} from "framer-motion";
-import {Avatar, AvatarFallback, AvatarImage} from "@/components/ui/avatar.tsx";
+import {Avatar, AvatarFallback} from "@/components/ui/avatar.tsx";
 
 /**
  * Sidebar navigation for Tutor dashboard area.
  * Uses shadcn/ui components and lucide-react icons.
  */
 export default function TutorSidebar() {
-    const {userProfile, logout} = useAuth();
+
+    const {
+        internalUser,
+        logout
+    } = useAuth();
+
     const location = useLocation();
 
-    // Extract initials from user profile
+    // Initials based on email (fallback)
     const initials =
-        (userProfile?.firstName?.[0] || "") + (userProfile?.lastName?.[0] || "");
+        internalUser?.email
+            ? internalUser.email.substring(0, 2).toUpperCase()
+            : "TU";
 
     // Sidebar navigation items
     const navItems = [
@@ -27,46 +34,50 @@ export default function TutorSidebar() {
         {to: "/dashboard/tutor/settings", label: "Settings", icon: Settings},
     ];
 
+    // Special rule:
+    const isActiveRoute = (path: string) => {
+        if (
+            path === "/dashboard/tutor/courses" &&
+            location.pathname.startsWith("/dashboard/tutor/course-builder")
+        ) {
+            return true;
+        }
+        return location.pathname === path;
+    };
+
     return (
         <aside className="hidden md:flex flex-col w-64 bg-white border-r border-gray-200 shadow-sm relative">
-            {/* 🧑 Tutor Info */}
+
+            {/* Header user info */}
             <div className="flex items-center gap-3 px-6 py-5 border-b bg-gray-50">
                 <Avatar className="w-10 h-10">
-                    <AvatarImage src={(userProfile?.attributes as any)?.avatarUrl?.[0]}/>
-                    <AvatarFallback>{initials || "TU"}</AvatarFallback>
+                    <AvatarFallback>{initials}</AvatarFallback>
                 </Avatar>
                 <div className="flex flex-col">
-          <span className="text-sm font-semibold text-gray-800">
-            {userProfile?.firstName || "Tutor"}
-          </span>
+                    <span className="text-sm font-semibold text-gray-800">
+                        {internalUser?.email ?? "Tutor"}
+                    </span>
                     <span className="text-xs text-gray-500">Instructor</span>
                 </div>
             </div>
 
-            {/* 🧭 Navigation Links */}
+            {/* Navigation */}
             <nav className="flex-1 px-3 py-4 space-y-1 relative">
                 {navItems.map(({to, label, icon: Icon}) => {
-                    const isActive = location.pathname === to;
+                    const active = isActiveRoute(to);
 
                     return (
-                        <NavLink
-                            key={to}
-                            to={to}
-                            end
-                            className="relative block rounded-xl"
-                        >
-                            {/* Background animation */}
-                            {isActive && (
+                        <NavLink key={to} to={to} end className="relative block rounded-xl">
+                            {active && (
                                 <motion.div
-                                    layoutId="activeIndicator"
+                                    layoutId="activeIndicatorTutor"
                                     className="absolute inset-0 bg-blue-50 rounded-xl"
                                     transition={{type: "spring", stiffness: 300, damping: 25}}
                                 />
                             )}
-
                             <div
-                                className={`relative flex items-center gap-3 px-3 py-2 rounded-xl transition-colors text-sm font-medium ${
-                                    isActive
+                                className={`relative flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
+                                    active
                                         ? "text-blue-700"
                                         : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
                                 }`}
@@ -79,7 +90,7 @@ export default function TutorSidebar() {
                 })}
             </nav>
 
-            {/* 🚪 Logout Button */}
+            {/* Logout */}
             <div className="p-4 border-t mt-auto">
                 <Button
                     variant="outline"
@@ -90,6 +101,7 @@ export default function TutorSidebar() {
                     Logout
                 </Button>
             </div>
+
         </aside>
     );
 }

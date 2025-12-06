@@ -1,131 +1,134 @@
-import {createContext, ReactNode, useContext, useEffect, useMemo, useState} from "react";
-import type {KeycloakProfile} from "keycloak-js";
-import Keycloak from "keycloak-js";
-import keycloakSingleton from "@/lib/KeycloakSingleton.ts";
+import {createContext, ReactNode, useContext, useEffect, useMemo, useState,} from "react";
 
 export interface AuthContextType {
-    keycloak: Keycloak;
+    loading: boolean;
     isAuthenticated: boolean;
-    userProfile: KeycloakProfile | null;
+    authUser: AuthUser | null;
+    internalUser: InternalUser | null;
+    setInternalUser: (u: InternalUser | null) => void;
     roles: string[];
     activeRole: string | null;
-    setActiveRole: (role: string | null) => void;
-    ready: boolean;
+    setActiveRole: (r: string | null) => void;
     login: () => void;
     logout: () => void;
-    register: () => void;
-    refreshToken: () => Promise<boolean>;
+}
+
+interface AuthUser {
+    id: string;
+    email: string;
+    roles: string[];
+}
+
+interface InternalUser {
+    id: string;
+    keycloakId: string;
+    email: string;
+    roles: string[];
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({children}: { children: ReactNode }) {
+    const API_ROOT = import.meta.env.VITE_API_URL;
+
+    const [loading, setLoading] = useState(true);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [userProfile, setUserProfile] = useState<KeycloakProfile | null>(null);
-    const [ready, setReady] = useState(false);
+
+    const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+    const [internalUser, setInternalUser] = useState<InternalUser | null>(null);
+
     const [roles, setRoles] = useState<string[]>([]);
     const [activeRole, setActiveRole] = useState<string | null>(null);
 
+    // Trigger login (Gateway mode)
+    const login = () => {
+        window.location.href = "/api/auth/login";
+    };
+
+    // Trigger logout (Gateway clears cookie)
+    const logout = () => {
+        window.location.href = "/api/auth/logout";
+    };
+
     useEffect(() => {
-        // 🧩 Avoid multiple Keycloak init calls
-        // @ts-ignore
-        if (keycloakSingleton.__initialized && keycloakSingleton.isAuthenticated) {
-            console.debug("⚠️ Keycloak déjà initialisé — skip init");
-            setReady(true);
-            setIsAuthenticated(true);
+        async function bootstrap() {
+            try {
+                // 1) Check Keycloak identity through Gateway
+                const authRes = await fetch(`${API_ROOT}/auth/me`, {
+                    credentials: "include",
+                });
 
-            if (keycloakSingleton.tokenParsed) {
-                const parsed = keycloakSingleton.tokenParsed as any;
-                const realmRoles = parsed?.realm_access?.roles || [];
-                setRoles(realmRoles);
-                console.log("🎭 Roles extraits depuis le token:", realmRoles);
-            }
-
-            // if (keycloakSingleton.authenticated) {
-            keycloakSingleton.loadUserProfile()
-                .then(setUserProfile)
-                .catch((err) => console.error("⚠️ Failed to load profile:", err));
-
-            //todo refresh tocken more long
-            const refresh = setInterval(async () => {
-                if (!keycloakSingleton.authenticated) return;
-                try {
-                    const refreshed = await keycloakSingleton.updateToken(60);
-                    if (refreshed) console.debug("🔁 Token refreshed successfully");
-                } catch (err) {
-                    console.error("⛔ Token refresh failed, redirecting to login");
-                    keycloakSingleton.login();
+                if (!authRes.ok) {
+                    setIsAuthenticated(false);
+                    setAuthUser(null);
+                    setInternalUser(null);
+                    setRoles([]);
+                    setActiveRole(null);
+                    return;
                 }
-            }, 60000);
 
-            return () => clearInterval(refresh);
+                const auth = await authRes.json();
+                setAuthUser(auth);
+                setIsAuthenticated(true);
+
+                // 2) Retrieve internal user
+                const userRes = await fetch(`${API_ROOT}/users/me`, {
+                    credentials: "include",
+                });
+
+                if (userRes.ok) {
+                    const internal = await userRes.json();
+                    setInternalUser(internal);
+
+                    // InternalUser is source of truth
+                    const assignedRoles = internal.roles ?? [];
+                    setRoles(assignedRoles);
+
+                    // Resolve activeRole
+                    if (assignedRoles.includes("ADMIN")) {
+                        setActiveRole("ADMIN");
+                    } else if (assignedRoles.includes("TUTOR")) {
+                        setActiveRole("TUTOR");
+                    } else {
+                        setActiveRole("STUDENT");
+                    }
+                }
+            } catch (err) {
+                console.error("Auth bootstrap failed:", err);
+                setIsAuthenticated(false);
+                setAuthUser(null);
+                setInternalUser(null);
+                setRoles([]);
+                setActiveRole(null);
+            } finally {
+                setLoading(false);
+            }
         }
 
-        keycloakSingleton.init({
-            onLoad: "check-sso",
-            pkceMethod: "S256",
-            silentCheckSsoRedirectUri: window.location.origin + "/silent-check-sso.html",
-        })
-            .then((authenticated) => {
-                console.log("🔐 Keycloak init terminé. Authenticated:", authenticated);
-                keycloakSingleton.__initialized = true; // ✅ placé ici uniquement après succès
-                setIsAuthenticated(authenticated);
-
-                if (authenticated) {
-                    keycloakSingleton.loadUserProfile()
-                        .then(setUserProfile)
-                        .catch(err => console.error("⚠️ Failed to load profile:", err));
-                }
-                const parsed = keycloakSingleton.tokenParsed as any;
-                const realmRoles = parsed?.realm_access?.roles || [];
-                console.log("roles => ", realmRoles);
-                setRoles(realmRoles);
-
-            })
-            .catch(err => {
-                console.error("❌ Keycloak init failed:", err)
-                keycloakSingleton.__initialized = false;
-            })
-            .finally(() => {
-                setReady(true)
-            });
-
-        // 🕐 Boucle de refresh
-        const refresh = setInterval(async () => {
-            if (!keycloakSingleton.authenticated) return;
-            try {
-                const refreshed = await keycloakSingleton.updateToken(60);
-                if (refreshed) console.debug("🔁 Token refreshed successfully");
-            } catch (err) {
-                console.error("⛔ Token refresh failed, redirecting to login");
-                keycloakSingleton.login();
-            }
-        }, 60000);
-
-        // 🧹 Nettoyage au démontage
-        return () => clearInterval(refresh);
-    }, []);
-
-    const login = () => keycloakSingleton.login();
-    const logout = () => keycloakSingleton.logout();
-    const register = () => keycloakSingleton.register();
-    const refreshToken = async () => keycloakSingleton.updateToken(60);
+        bootstrap();
+    }, [API_ROOT]);
 
     const value = useMemo(
         () => ({
-            keycloak: keycloakSingleton,
+            loading,
             isAuthenticated,
-            userProfile,
+            authUser,
+            internalUser,
+            setInternalUser,
             roles,
-            ready,
             activeRole,
             setActiveRole,
             login,
             logout,
-            register,
-            refreshToken,
         }),
-        [isAuthenticated, userProfile, roles, ready, activeRole]
+        [
+            loading,
+            isAuthenticated,
+            authUser,
+            internalUser,
+            roles,
+            activeRole,
+        ]
     );
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -133,6 +136,8 @@ export function AuthProvider({children}: { children: ReactNode }) {
 
 export function useAuth(): AuthContextType {
     const ctx = useContext(AuthContext);
-    if (!ctx) throw new Error("useAuth must be used within an AuthProvider");
+    if (!ctx) {
+        throw new Error("useAuth must be used within AuthProvider");
+    }
     return ctx;
 }

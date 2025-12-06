@@ -17,9 +17,17 @@ interface TutorRequestDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onConfirm: () => void;
+    loading: boolean;
+    result: "success" | "error" | null;
 }
 
-export function TutorRequestDialog({open, onOpenChange, onConfirm}: TutorRequestDialogProps) {
+export function TutorRequestDialog({
+                                       open,
+                                       onOpenChange,
+                                       onConfirm,
+                                       loading,
+                                       result
+                                   }: TutorRequestDialogProps) {
     return (
         <AlertDialog open={open} onOpenChange={onOpenChange}>
             <AlertDialogContent>
@@ -30,9 +38,14 @@ export function TutorRequestDialog({open, onOpenChange, onConfirm}: TutorRequest
                         Vous aurez alors accès à l’espace enseignant pour créer et gérer vos cours.
                     </AlertDialogDescription>
                 </AlertDialogHeader>
+
+                {/* Tu pourras gérer loading/result ici plus tard */}
+
                 <AlertDialogFooter>
-                    <AlertDialogCancel>Annuler</AlertDialogCancel>
-                    <AlertDialogAction onClick={onConfirm}>Oui, créer</AlertDialogAction>
+                    <AlertDialogCancel disabled={loading}>Annuler</AlertDialogCancel>
+                    <AlertDialogAction disabled={loading} onClick={onConfirm}>
+                        {loading ? "Traitement..." : "Oui, créer"}
+                    </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>

@@ -42,12 +42,12 @@ export function AuthProvider({children}: { children: ReactNode }) {
 
     // Trigger login (Gateway mode)
     const login = () => {
-        window.location.href = "/api/auth/login";
+        window.location.href = `${API_ROOT}/auth/login`;
     };
 
     // Trigger logout (Gateway clears cookie)
     const logout = () => {
-        window.location.href = "/api/auth/logout";
+        window.location.href = `${API_ROOT}/auth/logout`;
     };
 
     useEffect(() => {

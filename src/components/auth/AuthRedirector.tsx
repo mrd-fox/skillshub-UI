@@ -32,6 +32,7 @@ export function AuthRedirector() {
         if (!internalUser) {
             return;
         }
+        console.log("internalUser", internalUser);
 
         // 4) Already has activeRole → do nothing
         if (activeRole) {
@@ -39,6 +40,7 @@ export function AuthRedirector() {
         }
 
         const roles = internalUser.roles ?? [];
+        console.log("roles", roles);
 
         // 5) Authenticated but no roles → visitor mode
         if (roles.length === 0) {
@@ -80,6 +82,7 @@ export function AuthRedirector() {
         }
 
         if (resolved === "STUDENT") {
+            console.log("student");
             if (!currentPath.startsWith("/dashboard/student")) {
                 setActiveRole("STUDENT");
                 navigate("/dashboard/student", {replace: true});

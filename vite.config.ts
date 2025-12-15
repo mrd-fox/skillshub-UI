@@ -1,21 +1,27 @@
 import path from 'node:path';
 import tailwindcss from "@tailwindcss/vite"
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vite';
+import {defineConfig} from 'vite';
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
+    plugins: [react(), tailwindcss()],
+    optimizeDeps: {
+        include: ["@radix-ui/react-avatar"]
     },
-  },
-  server: {
-    watch: {
-      usePolling: true,
-      interval: 1000,
+    resolve: {
+        alias: {
+            '@': path.resolve(__dirname, './src'),
+        },
     },
-    host: true,
-    port: 5173
-  }
+    server: {
+        watch: {
+            usePolling: true,
+            interval: 1000,
+        },
+        host: true,
+        port: 5173
+    },
+    ssr: {
+        noExternal: ["@radix-ui/react-avatar"],
+    },
 });

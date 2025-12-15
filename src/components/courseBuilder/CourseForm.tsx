@@ -1,118 +1,114 @@
+// src/components/courseBuilder/CreateCourseForm.tsx
 import api from "@/lib/axios";
-import {useEffect, useState} from "react";
+import {useState} from "react";
 import {z} from "zod";
-import keycloakSingleton from "@/lib/KeycloakSingleton.ts";
-import axios from "axios";
+import {Button} from "@/components/ui/button";
+import {Input} from "@/components/ui/input";
+import {Textarea} from "@/components/ui/textarea";
+import {toast} from "sonner";
+import {useNavigate} from "react-router-dom";
 
 const courseSchema = z.object({
     title: z.string().min(3, "Le titre est requis (min 3 caractères)"),
     description: z.string().min(10, "La description est requise (min 10 caractères)"),
     price: z.number().min(0, "Le prix doit être positif"),
-    sections: z.array(z.any()), // tu pourras typer plus tard
+    sections: z.array(
+        z.object({
+            title: z.string().min(1, "Le titre de section est requis"),
+            chapters: z.array(
+                z.object({
+                    title: z.string().min(1, "Le titre du chapitre est requis"),
+                    position: z.number().optional(),
+                })
+            ),
+        })
+    ).optional(),
 });
 
 type CoursePayload = z.infer<typeof courseSchema>;
 
+export default function CreateCourseForm({sections}: { sections: any[] }) {
+    const [form, setForm] = useState<CoursePayload>({
+        title: "",
+        description: "",
+        price: 0,
+        sections: [],
+    });
+    const navigate = useNavigate();
+    const [errors, setErrors] = useState<Record<string, string>>({});
 
-export default function CreateCourseForm() {
-    const [title, setTitle] = useState("");
-    const [description, setDescription] = useState("");
-    const [price, setPrice] = useState(0);
-
-    const [sections, setSections] = useState<any[]>([]);
-    // Utilise setSections pour éviter l'erreur ESLint
-    useEffect(() => {
-        setSections([]);
-    }, []);
-
-    const [errors, setErrors] = useState<Partial<Record<keyof CoursePayload, string>>>({});
-    const [generalError, setGeneralError] = useState<string | null>(null);
-    const [success, setSuccess] = useState<string | null>(null);
+    const handleChange = (key: keyof CoursePayload, value: any) => {
+        setForm((prev) => ({...prev, [key]: value}));
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setErrors({});
-        setGeneralError(null);
-        setSuccess(null);
 
-        const payload = {title, description, price, sections};
+        const payload = {...form, sections};
         const validation = courseSchema.safeParse(payload);
 
         if (!validation.success) {
-            const fieldErrors: Partial<Record<keyof CoursePayload, string>> = {};
-            const formatted = validation.error.format();
-            if (formatted.title?._errors[0]) fieldErrors.title = formatted.title._errors[0];
-            if (formatted.description?._errors[0]) fieldErrors.description = formatted.description._errors[0];
-            if (formatted.price?._errors[0]) fieldErrors.price = formatted.price._errors[0];
-            setErrors(fieldErrors);
+            const formatted: Record<string, string> = {};
+            for (const issue of validation.error.issues) {
+                formatted[issue.path.join(".")] = issue.message;
+            }
+            setErrors(formatted);
             return;
         }
 
         try {
-            console.log("-----------------", JSON.stringify(payload), `${api.getUri()}`);
-
-            // 🧩 Ajoute ici tes logs de debug
-            console.log("🚀 Keycloak initialized?", keycloakSingleton.__initialized);
-            console.log("🕓 Authenticated:", keycloakSingleton.authenticated);
-            console.log("🔑 Token actuel:", keycloakSingleton.token);
-
-            // 👉 Appel réel (décommente pour tester)
-            await api.post("/course", payload);
-            setSuccess("Cours créé avec succès !");
-        } catch (err: Error | any) {
-            if (axios.isCancel(err)) {
-                console.warn("🚫 Request canceled:", err.message);
-            } else {
-                console.error("🔥 API error:", err);
-            }
-            setGeneralError(err.message);
+            const res = await api.post("/course", payload);
+            const createdCourse = res.data;
+            toast.success("Cours créé avec succès !");
+            navigate(`/dashboard/tutor/course-builder/${createdCourse.id}`, {
+                state: {course: createdCourse},
+            });
+        } catch (err: any) {
+            console.error("🔥 API error:", err);
+            toast.error("Erreur lors de la création du cours.");
         }
-
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4 max-w-lg mx-auto">
-            <div>
-                <input
-                    type="text"
-                    placeholder="Titre"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    className="w-full p-2 border rounded"
+        <form
+            onSubmit={handleSubmit}
+            className="bg-white p-6 rounded-xl shadow-md space-y-6 border border-gray-100"
+        >
+            <div className="space-y-2">
+                <label className="font-medium text-sm">Titre du cours</label>
+                <Input
+                    placeholder="Ex: Apprendre React de zéro"
+                    value={form.title}
+                    onChange={(e) => handleChange("title", e.target.value)}
                 />
-                {errors.title && <p className="text-sm text-red-600">{errors.title}</p>}
+                {errors["title"] && <p className="text-sm text-red-600">{errors["title"]}</p>}
             </div>
 
-            <div>
-        <textarea
-            placeholder="Description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="w-full p-2 border rounded"
-        />
-                {errors.description && <p className="text-sm text-red-600">{errors.description}</p>}
+            <div className="space-y-2">
+                <label className="font-medium text-sm">Description</label>
+                <Textarea
+                    placeholder="Décrivez le contenu et les objectifs du cours"
+                    value={form.description}
+                    onChange={(e) => handleChange("description", e.target.value)}
+                />
+                {errors["description"] && <p className="text-sm text-red-600">{errors["description"]}</p>}
             </div>
 
-            <div>
-                <input
+            <div className="space-y-2">
+                <label className="font-medium text-sm">Prix (€)</label>
+                <Input
                     type="number"
-                    placeholder="Prix"
-                    value={price}
-                    onChange={(e) => setPrice(Number(e.target.value))}
-                    className="w-full p-2 border rounded"
+                    min="0"
+                    step="0.01"
+                    value={form.price}
+                    onChange={(e) => handleChange("price", Number(e.target.value))}
                 />
-                {errors.price && <p className="text-sm text-red-600">{errors.price}</p>}
+                {errors["price"] && <p className="text-sm text-red-600">{errors["price"]}</p>}
             </div>
 
-            {generalError && <p className="text-red-600">{generalError}</p>}
-            {success && <p className="text-green-600">{success}</p>}
-
-            <button
-                type="submit"
-                className="px-4 py-2 bg-indigo-600 text-black rounded hover:bg-indigo-700"
-            >
+            <Button type="submit" className="w-full !bg-[#2A6AEE] !text-white hover:!bg-[#1f57ca]">
                 Créer le cours
-            </button>
+            </Button>
         </form>
     );
 }

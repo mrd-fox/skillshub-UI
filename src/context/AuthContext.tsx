@@ -19,11 +19,33 @@ interface AuthUser {
     roles: string[];
 }
 
+interface RoleResponse {
+    name: string;
+}
+
+interface InternalUserResponse {
+    id: string;
+    externalId: string;
+    firstName: string | null;
+    lastName: string | null;
+    email: string;
+    active: boolean;
+    roles: RoleResponse[];
+}
+
+interface InternalUserEnvelope {
+    created: boolean;
+    user: InternalUserResponse;
+}
+
 interface InternalUser {
     id: string;
     keycloakId: string;
     email: string;
     roles: string[];
+    firstName?: string | null;
+    lastName?: string | null;
+    active?: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -53,7 +75,7 @@ export function AuthProvider({children}: { children: ReactNode }) {
     useEffect(() => {
         async function bootstrap() {
             try {
-                // 1) Check Keycloak identity through Gateway
+                // 1) Check identity through Gateway
                 const authRes = await fetch(`${API_ROOT}/auth/me`, {
                     credentials: "include",
                 });
@@ -67,21 +89,32 @@ export function AuthProvider({children}: { children: ReactNode }) {
                     return;
                 }
 
-                const auth = await authRes.json();
+                const auth: AuthUser = await authRes.json();
                 setAuthUser(auth);
                 setIsAuthenticated(true);
 
-                // 2) Retrieve internal user
+                // 2) Retrieve internal user (envelope)
                 const userRes = await fetch(`${API_ROOT}/users/me`, {
                     credentials: "include",
                 });
 
                 if (userRes.ok) {
-                    const internal = await userRes.json();
-                    setInternalUser(internal);
+                    const envelope: InternalUserEnvelope = await userRes.json();
 
-                    // InternalUser is source of truth
-                    const assignedRoles = internal.roles ?? [];
+                    const user = envelope.user;
+                    const assignedRoles = (user.roles ?? []).map((r) => r.name);
+
+                    const mappedInternal: InternalUser = {
+                        id: user.id,
+                        keycloakId: user.externalId,
+                        email: user.email,
+                        roles: assignedRoles,
+                        firstName: user.firstName,
+                        lastName: user.lastName,
+                        active: user.active,
+                    };
+
+                    setInternalUser(mappedInternal);
                     setRoles(assignedRoles);
 
                     // Resolve activeRole
@@ -92,6 +125,11 @@ export function AuthProvider({children}: { children: ReactNode }) {
                     } else {
                         setActiveRole("STUDENT");
                     }
+                } else {
+                    // If /users/me fails, keep auth but no internal user
+                    setInternalUser(null);
+                    setRoles([]);
+                    setActiveRole(null);
                 }
             } catch (err) {
                 console.error("Auth bootstrap failed:", err);
@@ -121,14 +159,7 @@ export function AuthProvider({children}: { children: ReactNode }) {
             login,
             logout,
         }),
-        [
-            loading,
-            isAuthenticated,
-            authUser,
-            internalUser,
-            roles,
-            activeRole,
-        ]
+        [loading, isAuthenticated, authUser, internalUser, roles, activeRole]
     );
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

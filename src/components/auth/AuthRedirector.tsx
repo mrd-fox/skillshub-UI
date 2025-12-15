@@ -17,13 +17,12 @@ export function AuthRedirector() {
     const location = useLocation();
 
     useEffect(() => {
-
         // 1) Still loading
         if (loading) {
             return;
         }
 
-        // 2) User is not authenticated → leave them on public pages
+        // 2) Not authenticated: stay on public pages
         if (!isAuthenticated) {
             return;
         }
@@ -32,22 +31,15 @@ export function AuthRedirector() {
         if (!internalUser) {
             return;
         }
-        console.log("internalUser", internalUser);
-
-        // 4) Already has activeRole → do nothing
-        if (activeRole) {
-            return;
-        }
 
         const roles = internalUser.roles ?? [];
-        console.log("roles", roles);
 
-        // 5) Authenticated but no roles → visitor mode
+        // 4) No roles: nothing to do
         if (roles.length === 0) {
             return;
         }
 
-        // 6) Resolve role with priority
+        // 5) Resolve role with priority
         let resolved: string | null = null;
 
         if (roles.includes("ADMIN")) {
@@ -62,12 +54,16 @@ export function AuthRedirector() {
             return;
         }
 
-        // 7) Prevent redirect loops if user is ALREADY on the correct page
+        // 6) Keep activeRole aligned with resolved role
+        if (activeRole !== resolved) {
+            setActiveRole(resolved);
+        }
+
+        // 7) Redirect if not already in the correct section
         const currentPath = location.pathname;
 
         if (resolved === "ADMIN") {
             if (!currentPath.startsWith("/admin")) {
-                setActiveRole("ADMIN");
                 navigate("/admin/dashboard", {replace: true});
             }
             return;
@@ -75,21 +71,15 @@ export function AuthRedirector() {
 
         if (resolved === "TUTOR") {
             if (!currentPath.startsWith("/dashboard/tutor")) {
-                setActiveRole("TUTOR");
                 navigate("/dashboard/tutor", {replace: true});
             }
             return;
         }
 
-        if (resolved === "STUDENT") {
-            console.log("student");
-            if (!currentPath.startsWith("/dashboard/student")) {
-                setActiveRole("STUDENT");
-                navigate("/dashboard/student", {replace: true});
-            }
-            return;
+        // STUDENT
+        if (!currentPath.startsWith("/dashboard/student")) {
+            navigate("/dashboard/student", {replace: true});
         }
-
     }, [
         loading,
         isAuthenticated,
@@ -97,8 +87,7 @@ export function AuthRedirector() {
         activeRole,
         setActiveRole,
         navigate,
-        location
+        location.pathname,
     ]);
-
     return null;
 }

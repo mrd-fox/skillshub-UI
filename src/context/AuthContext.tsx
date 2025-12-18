@@ -59,23 +59,41 @@ export function AuthProvider({children}: { children: ReactNode }) {
     const [authUser, setAuthUser] = useState<AuthUser | null>(null);
     const [internalUser, setInternalUser] = useState<InternalUser | null>(null);
 
-    const [roles, setRoles] = useState<string[]>([]);
     const [activeRole, setActiveRole] = useState<string | null>(null);
 
-    // Trigger login (Gateway mode)
+    // Single source of truth for roles = internalUser.roles
+    const roles = useMemo(() => {
+        if (internalUser && Array.isArray(internalUser.roles)) {
+            return internalUser.roles;
+        } else {
+            return [];
+        }
+    }, [internalUser]);
+
     const login = () => {
         window.location.href = `${API_ROOT}/auth/login`;
     };
 
-    // Trigger logout (Gateway clears cookie)
     const logout = () => {
         window.location.href = `${API_ROOT}/auth/logout`;
+    };
+
+    const resolveDefaultRole = (currentRoles: string[]) => {
+        // Priority: ADMIN > TUTOR > STUDENT
+        if (currentRoles.includes("ADMIN")) {
+            return "ADMIN";
+        } else if (currentRoles.includes("TUTOR")) {
+            return "TUTOR";
+        } else if (currentRoles.includes("STUDENT")) {
+            return "STUDENT";
+        } else {
+            return null;
+        }
     };
 
     useEffect(() => {
         async function bootstrap() {
             try {
-                // 1) Check identity through Gateway
                 const authRes = await fetch(`${API_ROOT}/auth/me`, {
                     credentials: "include",
                 });
@@ -84,7 +102,6 @@ export function AuthProvider({children}: { children: ReactNode }) {
                     setIsAuthenticated(false);
                     setAuthUser(null);
                     setInternalUser(null);
-                    setRoles([]);
                     setActiveRole(null);
                     return;
                 }
@@ -93,7 +110,6 @@ export function AuthProvider({children}: { children: ReactNode }) {
                 setAuthUser(auth);
                 setIsAuthenticated(true);
 
-                // 2) Retrieve internal user (envelope)
                 const userRes = await fetch(`${API_ROOT}/users/me`, {
                     credentials: "include",
                 });
@@ -115,20 +131,14 @@ export function AuthProvider({children}: { children: ReactNode }) {
                     };
 
                     setInternalUser(mappedInternal);
-                    setRoles(assignedRoles);
 
-                    // Resolve activeRole
-                    if (assignedRoles.includes("ADMIN")) {
-                        setActiveRole("ADMIN");
-                    } else if (assignedRoles.includes("TUTOR")) {
-                        setActiveRole("TUTOR");
-                    } else {
-                        setActiveRole("STUDENT");
+                    // Do not overwrite user's activeRole unless missing or invalid
+                    const defaultRole = resolveDefaultRole(assignedRoles);
+                    if (defaultRole && (!activeRole || !assignedRoles.includes(activeRole))) {
+                        setActiveRole(defaultRole);
                     }
                 } else {
-                    // If /users/me fails, keep auth but no internal user
                     setInternalUser(null);
-                    setRoles([]);
                     setActiveRole(null);
                 }
             } catch (err) {
@@ -136,7 +146,6 @@ export function AuthProvider({children}: { children: ReactNode }) {
                 setIsAuthenticated(false);
                 setAuthUser(null);
                 setInternalUser(null);
-                setRoles([]);
                 setActiveRole(null);
             } finally {
                 setLoading(false);
@@ -145,6 +154,26 @@ export function AuthProvider({children}: { children: ReactNode }) {
 
         bootstrap();
     }, [API_ROOT]);
+
+    useEffect(() => {
+        // Ensure activeRole remains consistent after internalUser changes (e.g., tutor promotion)
+        if (!internalUser) {
+            return;
+        }
+
+        const currentRoles = internalUser.roles ?? [];
+        if (currentRoles.length === 0) {
+            return;
+        }
+
+        const defaultRole = resolveDefaultRole(currentRoles);
+
+        if (!activeRole && defaultRole) {
+            setActiveRole(defaultRole);
+        } else if (activeRole && !currentRoles.includes(activeRole) && defaultRole) {
+            setActiveRole(defaultRole);
+        }
+    }, [internalUser, activeRole]);
 
     const value = useMemo(
         () => ({

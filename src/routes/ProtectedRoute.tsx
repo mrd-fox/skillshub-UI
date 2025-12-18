@@ -1,18 +1,17 @@
-import {ReactNode} from "react";
+import {ReactNode, useEffect} from "react";
 import {Loader2} from "lucide-react";
 import {useAuth} from "@/context/AuthContext.tsx";
 import {Navigate} from "react-router-dom";
 
 interface ProtectedRouteProps {
     children: ReactNode;
-    requiredRoles?: string[]; // ex: ["TUTOR"], ["STUDENT", "TUTOR"]
+    requiredRoles?: string[];
 }
 
 export default function ProtectedRoute({children, requiredRoles}: ProtectedRouteProps) {
+    const {loading, isAuthenticated, internalUser, login} = useAuth();
 
-    const {loading, isAuthenticated, internalUser} = useAuth();
-
-    // 1️⃣ Authentication bootstrap loading
+    // Auth bootstrap in progress
     if (loading) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen gap-4">
@@ -22,34 +21,41 @@ export default function ProtectedRoute({children, requiredRoles}: ProtectedRoute
         );
     }
 
-    // 2️⃣ Not authenticated → redirect to login
+    // Not authenticated -> redirect to Gateway login
     if (!isAuthenticated) {
-        return <Navigate to="/login" replace/>;
+        return <LoginRedirect login={login}/>;
     }
 
-    // 3️⃣ Authenticated but NO internalUser data → treat as visitor
+    // Authenticated but internal profile missing -> no private access
     if (!internalUser) {
-        return <Navigate to="/login" replace/>;
+        return <Navigate to="/unauthorized" replace/>;
     }
 
-    // 4️⃣ User authenticated but has NO roles → visitor (no private access)
     const userRoles = internalUser.roles ?? [];
     if (userRoles.length === 0) {
-        return <Navigate to="/login" replace/>;
+        return <Navigate to="/unauthorized" replace/>;
     }
 
-    // 5️⃣ Required role but user does not have it → unauthorized
+    // Role guard
     if (requiredRoles && requiredRoles.length > 0) {
-
-        const hasRole = requiredRoles.some((required) => {
-            return userRoles.includes(required);
-        });
-
+        const hasRole = requiredRoles.some((required) => userRoles.includes(required));
         if (!hasRole) {
             return <Navigate to="/unauthorized" replace/>;
         }
     }
 
-    // 6️⃣ User is authenticated AND authorized
     return <>{children}</>;
+}
+
+function LoginRedirect({login}: { login: () => void }) {
+    useEffect(() => {
+        login();
+    }, [login]);
+
+    return (
+        <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground"/>
+            <p className="text-sm text-muted-foreground">Redirection vers la connexion...</p>
+        </div>
+    );
 }

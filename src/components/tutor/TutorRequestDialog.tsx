@@ -9,6 +9,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {useEffect} from "react";
 
 /**
  * Modal dialog to confirm tutor profile creation.
@@ -26,8 +27,15 @@ export function TutorRequestDialog({
                                        onOpenChange,
                                        onConfirm,
                                        loading,
-                                       result
+                                       result,
                                    }: TutorRequestDialogProps) {
+    useEffect(() => {
+        // Close dialog automatically after success
+        if (open && result === "success") {
+            onOpenChange(false);
+        }
+    }, [open, result, onOpenChange]);
+
     return (
         <AlertDialog open={open} onOpenChange={onOpenChange}>
             <AlertDialogContent>
@@ -39,12 +47,29 @@ export function TutorRequestDialog({
                     </AlertDialogDescription>
                 </AlertDialogHeader>
 
-                {/* Tu pourras gérer loading/result ici plus tard */}
+                {result === "error" ? (
+                    <div className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                        Une erreur est survenue pendant la promotion. Réessayez.
+                    </div>
+                ) : null}
+
+                {result === "success" ? (
+                    <div
+                        className="mt-2 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+                        Profil professeur activé. Redirection en cours...
+                    </div>
+                ) : null}
 
                 <AlertDialogFooter>
-                    <AlertDialogCancel disabled={loading}>Annuler</AlertDialogCancel>
-                    <AlertDialogAction disabled={loading} onClick={onConfirm}>
-                        {loading ? "Traitement..." : "Oui, créer"}
+                    <AlertDialogCancel disabled={loading}>
+                        Annuler
+                    </AlertDialogCancel>
+
+                    <AlertDialogAction
+                        disabled={loading || result === "success"}
+                        onClick={onConfirm}
+                    >
+                        {loading ? "Traitement..." : result === "error" ? "Réessayer" : "Oui, créer"}
                     </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>

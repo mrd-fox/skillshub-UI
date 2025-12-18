@@ -3,91 +3,77 @@ import {useLocation, useNavigate} from "react-router-dom";
 import {useAuth} from "@/context/AuthContext.tsx";
 
 
+function resolveTargetPath(roles: string[], activeRole: string | null): string | null {
+    if (activeRole === "ADMIN") {
+        return "/admin/dashboard";
+    } else if (activeRole === "TUTOR") {
+        return "/dashboard/tutor";
+    } else if (activeRole === "STUDENT") {
+        return "/dashboard/student";
+    } else {
+        if (roles.includes("ADMIN")) {
+            return "/admin/dashboard";
+        } else if (roles.includes("TUTOR")) {
+            return "/dashboard/tutor";
+        } else if (roles.includes("STUDENT")) {
+            return "/dashboard/student";
+        } else {
+            return null;
+        }
+    }
+}
+
 export function AuthRedirector() {
-
-    const {
-        loading,
-        isAuthenticated,
-        internalUser,
-        activeRole,
-        setActiveRole,
-    } = useAuth();
-
+    const {loading, isAuthenticated, internalUser, activeRole} = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
 
     useEffect(() => {
-        // 1) Still loading
         if (loading) {
             return;
         }
 
-        // 2) Not authenticated: stay on public pages
         if (!isAuthenticated) {
             return;
         }
 
-        // 3) Authenticated but internal user not loaded yet
+        // Never redirect while user is already inside protected areas
+        if (location.pathname.startsWith("/dashboard") || location.pathname.startsWith("/admin")) {
+            return;
+        }
+
+        // Redirect only on entry pages
+        const isRedirectEligible =
+            location.pathname === "/" ||
+            location.pathname === "/login" ||
+            location.pathname === "/unauthorized";
+
+        if (!isRedirectEligible) {
+            return;
+        }
+
+        // Authenticated but profile missing -> no dashboard redirection possible
         if (!internalUser) {
+            if (location.pathname !== "/unauthorized") {
+                navigate("/unauthorized", {replace: true});
+            }
             return;
         }
 
         const roles = internalUser.roles ?? [];
+        const target = resolveTargetPath(roles, activeRole);
 
-        // 4) No roles: nothing to do
-        if (roles.length === 0) {
-            return;
-        }
-
-        // 5) Resolve role with priority
-        let resolved: string | null = null;
-
-        if (roles.includes("ADMIN")) {
-            resolved = "ADMIN";
-        } else if (roles.includes("TUTOR")) {
-            resolved = "TUTOR";
-        } else if (roles.includes("STUDENT")) {
-            resolved = "STUDENT";
-        }
-
-        if (resolved === null) {
-            return;
-        }
-
-        // 6) Keep activeRole aligned with resolved role
-        if (activeRole !== resolved) {
-            setActiveRole(resolved);
-        }
-
-        // 7) Redirect if not already in the correct section
-        const currentPath = location.pathname;
-
-        if (resolved === "ADMIN") {
-            if (!currentPath.startsWith("/admin")) {
-                navigate("/admin/dashboard", {replace: true});
+        if (!target) {
+            if (location.pathname !== "/unauthorized") {
+                navigate("/unauthorized", {replace: true});
             }
             return;
         }
 
-        if (resolved === "TUTOR") {
-            if (!currentPath.startsWith("/dashboard/tutor")) {
-                navigate("/dashboard/tutor", {replace: true});
-            }
-            return;
+        if (location.pathname !== target) {
+            navigate(target, {replace: true});
         }
+    }, [loading, isAuthenticated, internalUser, activeRole, location.pathname, navigate]);
 
-        // STUDENT
-        if (!currentPath.startsWith("/dashboard/student")) {
-            navigate("/dashboard/student", {replace: true});
-        }
-    }, [
-        loading,
-        isAuthenticated,
-        internalUser,
-        activeRole,
-        setActiveRole,
-        navigate,
-        location.pathname,
-    ]);
     return null;
 }

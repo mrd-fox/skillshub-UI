@@ -1,11 +1,15 @@
 // src/layouts/CourseBuilderLayout.tsx
-import {Outlet, useLocation, useNavigate, useParams} from "react-router-dom";
+import {Navigate, Outlet, useLocation, useNavigate, useParams} from "react-router-dom";
 import {Tabs, TabsList, TabsTrigger} from "@/components/ui/tabs.tsx";
 
 export default function CourseBuilderLayout() {
     const navigate = useNavigate();
     const {courseId} = useParams();
     const location = useLocation();
+
+    if (!courseId) {
+        return <Navigate to="/dashboard/tutor" replace/>;
+    }
 
     const basePath = `/dashboard/tutor/course-builder/${courseId}`;
 
@@ -16,21 +20,27 @@ export default function CourseBuilderLayout() {
         {value: "settings", label: "Paramètres"},
     ];
 
-    // ✅ Détermination de l’onglet actif à partir de l’URL
-    const current = tabs.some((t) => location.pathname.endsWith(t.value))
-        ? location.pathname.split("/").pop()
-        : "edit";
+    const allowed = tabs.map((t) => t.value);
+
+    const pathParts = location.pathname.split("/").filter(Boolean);
+    const idx = pathParts.indexOf("course-builder");
+    const candidate = idx >= 0 ? pathParts[idx + 2] : null;
+
+    const current = candidate && allowed.includes(candidate) ? candidate : "edit";
 
     return (
         <div className="flex flex-col h-full bg-gray-50">
-            {/* 🧭 Barre d’onglets type Chrome */}
-            <Tabs value={current}>
+            <Tabs
+                value={current}
+                onValueChange={(value) => {
+                    navigate(`${basePath}/${value}`);
+                }}
+            >
                 <TabsList className="flex gap-1 px-8 pt-5 pb-0 bg-gray-100 border-b border-gray-200">
                     {tabs.map(({value, label}) => (
                         <TabsTrigger
                             key={value}
                             value={value}
-                            onClick={() => navigate(`${basePath}/${value}`)}
                             className={`
                 relative px-5 py-2 text-sm font-medium transition-all duration-200
                 rounded-t-lg
@@ -52,7 +62,6 @@ export default function CourseBuilderLayout() {
                 </TabsList>
             </Tabs>
 
-            {/* 🧱 Contenu principal */}
             <div className="flex-1 p-8 overflow-y-auto bg-white rounded-b-lg shadow-inner">
                 <Outlet/>
             </div>

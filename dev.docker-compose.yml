@@ -5,7 +5,7 @@ services:
   skillshub-front-dev:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: dev.Dockerfile
 
     container_name: skillshub-front-dev
 

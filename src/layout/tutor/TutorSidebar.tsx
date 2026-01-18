@@ -27,12 +27,11 @@ export default function TutorSidebar() {
 
     // Sidebar navigation items
     const navItems = [
-        {to: "/dashboard/tutor", label: "Dashboard", icon: LayoutDashboard},
-        {to: "/dashboard/tutor/courses", label: "My Courses", icon: BookOpen},
-        {to: "/dashboard/tutor/create", label: "Create Course", icon: PlusCircle},
-        {to: "/dashboard/tutor/students", label: "My Students", icon: Users},
-        {to: "/dashboard/tutor/settings", label: "Settings", icon: Settings},
-    ];
+        { to: "/dashboard/tutor", label: "Dashboard", icon: LayoutDashboard, end: true },
+        { to: "/dashboard/tutor/courses", label: "My Courses", icon: BookOpen, end: false }, // ✅ important
+        { to: "/dashboard/tutor/create", label: "Create Course", icon: PlusCircle, end: true },
+        { to: "/dashboard/tutor/students", label: "My Students", icon: Users, end: true },
+        { to: "/dashboard/tutor/settings", label: "Settings", icon: Settings, end: true },    ];
 
     // Special rule:
     const isActiveRoute = (path: string) => {
@@ -63,11 +62,11 @@ export default function TutorSidebar() {
 
             {/* Navigation */}
             <nav className="flex-1 px-3 py-4 space-y-1 relative">
-                {navItems.map(({to, label, icon: Icon}) => {
+                {navItems.map(({to, label, icon: Icon, end}) => {
                     const active = isActiveRoute(to);
 
                     return (
-                        <NavLink key={to} to={to} end className="relative block rounded-xl">
+                        <NavLink key={to} to={to} end={end} className="relative block rounded-xl">
                             {active && (
                                 <motion.div
                                     layoutId="activeIndicatorTutor"

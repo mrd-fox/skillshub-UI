@@ -4,10 +4,10 @@ import axios from "axios";
 
 const api = axios.create({
     baseURL: import.meta.env.VITE_API_URL,
-    withCredentials: true,  // 🔥 Envoie automatiquement les cookies (SKILLSHUB_AUTH)
+    withCredentials: true,  //  cookies (SKILLSHUB_AUTH)
 });
 
-// Gestion globale des erreurs HTTP
+
 api.interceptors.response.use(
     (response) => response,
     (error) => {
@@ -15,12 +15,12 @@ api.interceptors.response.use(
 
         // 401 → utilisateur non connecté
         if (status === 401) {
-            console.warn("⛔ Non authentifié → redirection login");
+            console.warn("⛔ Not identified  → redirection login");
         }
 
         return Promise.reject({
             status,
-            message: error?.response?.data?.message || "Une erreur inconnue est survenue.",
+            message: error?.response?.data?.message || "Unknow error",
         });
     }
 );

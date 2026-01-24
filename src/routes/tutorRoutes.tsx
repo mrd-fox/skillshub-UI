@@ -1,14 +1,16 @@
 // src/routes/tutorRoutes.tsx
-import {Navigate, RouteObject} from "react-router-dom";
+import {Navigate} from "react-router-dom";
 import ProtectedRoute from "@/routes/ProtectedRoute.tsx";
 import TutorLayout from "@/layout/tutor/TutorLayout.tsx";
 import CourseBuilder from "@/components/courseBuilder/CourseBuilder.tsx";
-import CourseBuilderLayout from "@/layout/CourseBuilderLayout.tsx";
+
 import SectionsPage from "@/pages/tutor/course-builder/SectionsPage.tsx";
 import ResourcesPage from "@/pages/tutor/course-builder/ResourcesPage.tsx";
 import EditCoursePage from "@/pages/tutor/course-builder/EditCoursePage.tsx";
 import SettingsPage from "@/pages/tutor/course-builder/SettingsPage.tsx";
 import TutorMyCoursesPage from "@/pages/tutor/TutorMyCoursesPage.tsx";
+import {JSX} from "react";
+import {CourseBuilderLayout} from "@/layout/tutor";
 
 const TutorDashboard = () => <div className="p-6">👨‍🏫 Tutor Dashboard</div>;
 
@@ -26,8 +28,9 @@ export let tutorRoutes: {
                 { index: boolean; element: JSX.Element }
                 )[]
         }
-    )[]
+        )[]
 };
+// eslint-disable-next-line prefer-const
 tutorRoutes = {
     path: "/dashboard/tutor",
     element: (
@@ -38,7 +41,7 @@ tutorRoutes = {
     children: [
         {index: true, element: <TutorDashboard/>},
         // ✅ My Courses (list)
-        { path: "courses", element: <TutorMyCoursesPage /> },
+        {path: "courses", element: <TutorMyCoursesPage/>},
         // ✅ Create course
         {path: "create", element: <CourseBuilder/>},
 

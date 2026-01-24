@@ -4,6 +4,11 @@ import {NavLink, Outlet, useLocation, useParams} from "react-router-dom";
 import api from "@/api/axios.ts";
 import {Loader2} from "lucide-react";
 import {VideoResponse} from "@/types/video.ts";
+import {Button} from "@/components/ui/button.tsx";
+import {Card} from "@/components/ui/card.tsx";
+import {Badge} from "@/components/ui/badge.tsx";
+import {cn} from "@/lib/utils.ts";
+import {TooltipProvider} from "@/components/ui/tooltip.tsx";
 
 type ChapterResponse = {
     id: string;
@@ -142,75 +147,79 @@ export default function CourseBuilderLayout() {
     }
 
     return (
-        <CourseBuilderContext.Provider value={ctxValue}>
-            <div className="w-full">
-                {/* Top tabs */}
-                <div className="w-full rounded-xl border bg-white px-3 py-2 shadow-sm">
-                    <div className="flex items-center gap-2">
-                        <TabLink to="edit" label="Informations" active={activeTab === "edit"}/>
-                        <TabLink
-                            to="sections"
-                            label="Sections & chapitres"
-                            active={activeTab === "sections"}
-                        />
-                        <TabLink to="resources" label="Ressources" active={activeTab === "resources"}/>
-                        <TabLink to="settings" label="Paramètres" active={activeTab === "settings"}/>
+        <TooltipProvider>
+            <CourseBuilderContext.Provider value={ctxValue}>
+                <div className="w-full">
+                    <Card className="w-full p-2">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <TabLink to="edit" label="Informations" active={activeTab === "edit"}/>
+                                <TabLink
+                                    to="sections"
+                                    label="Sections & chapitres"
+                                    active={activeTab === "sections"}
+                                />
+                                <TabLink to="resources" label="Ressources" active={activeTab === "resources"}/>
+                                <TabLink to="settings" label="Paramètres" active={activeTab === "settings"}/>
+                            </div>
 
-                        <div className="ml-auto flex items-center gap-3 pr-1">
-                            {loading ? (
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                    <Loader2 className="h-4 w-4 animate-spin"/>
-                                    Loading...
-                                </div>
-                            ) : null}
+                            <div className="ml-auto flex items-center gap-3">
+                                {loading ? (
+                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                        <Loader2 className="h-4 w-4 animate-spin"/>
+                                        Loading
+                                    </div>
+                                ) : null}
 
-                            {saving ? (
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                    <Loader2 className="h-4 w-4 animate-spin"/>
-                                    Saving...
-                                </div>
-                            ) : null}
+                                {saving ? (
+                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                        <Loader2 className="h-4 w-4 animate-spin"/>
+                                        Saving
+                                    </div>
+                                ) : null}
 
-                            {course ? (
-                                <span className="rounded-full border px-3 py-1 text-xs font-medium">
-                  {course.status}
-                </span>
-                            ) : null}
+                                {course ? (
+                                    <Badge
+                                        variant="outline"
+                                        className="rounded-full px-3 py-1 text-xs font-semibold"
+                                    >
+                                        {course.status}
+                                    </Badge>
+                                ) : null}
+                            </div>
                         </div>
+                    </Card>
+
+                    <div className="mt-6">
+                        {loading ? (
+                            <div className="flex h-[55vh] items-center justify-center">
+                                <Loader2 className="h-6 w-6 animate-spin"/>
+                            </div>
+                        ) : (
+                            <Outlet/>
+                        )}
                     </div>
                 </div>
-
-                {/* Content */}
-                <div className="mt-6">
-                    {loading ? (
-                        <div className="flex h-[55vh] items-center justify-center">
-                            <Loader2 className="h-6 w-6 animate-spin"/>
-                        </div>
-                    ) : (
-                        <Outlet/>
-                    )}
-                </div>
-            </div>
-        </CourseBuilderContext.Provider>
+            </CourseBuilderContext.Provider>
+        </TooltipProvider>
     );
 }
 
 function TabLink(props: { to: string; label: string; active: boolean }) {
     return (
-        <NavLink
-            to={props.to}
-            className={() => {
-                return [
-                    "rounded-lg px-4 py-2 text-sm font-medium transition-colors",
-                    props.active
-                        ? "bg-blue-50 text-blue-700 shadow-sm"
-                        : "text-gray-700 hover:bg-gray-100 hover:text-gray-900",
-                ].join(" ");
-            }}
-            end
+        <Button
+            variant={props.active ? "secondary" : "ghost"}
+            size="sm"
+            asChild
+            className={cn(
+                "h-9 rounded-lg px-4",
+                props.active ? "shadow-sm" : "text-muted-foreground"
+            )}
         >
-            {props.label}
-        </NavLink>
+            <NavLink to={props.to} end>
+                {props.label}
+            </NavLink>
+        </Button>
     );
 }
 

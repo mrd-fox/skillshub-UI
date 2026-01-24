@@ -30,7 +30,7 @@ function statusVariant(status: CourseStatusEnum | null | undefined): "default" |
     } else if (status === "REJECTED") {
         return "destructive";
     } else {
-        
+
         return "secondary";
     }
 }
@@ -48,7 +48,7 @@ export default function HomePage() {
             setError(null);
 
             try {
-                const res = await api.get<PublicCourse[]>("/course");
+                const res = await api.get<PublicCourse[]>("/public/courses");
 
                 if (!cancelled) {
                     setCourses(Array.isArray(res.data) ? res.data : []);

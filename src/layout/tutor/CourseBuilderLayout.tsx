@@ -1,8 +1,8 @@
 import * as React from "react";
-import {createContext, useContext, useEffect, useMemo, useState} from "react";
+import {createContext, useCallback, useContext, useEffect, useMemo, useState} from "react";
 import {NavLink, Outlet, useLocation, useParams} from "react-router-dom";
 import api from "@/api/axios.ts";
-import {Loader2} from "lucide-react";
+import {Loader2, Save} from "lucide-react";
 import {VideoResponse} from "@/types/video.ts";
 import {Button} from "@/components/ui/button.tsx";
 import {Card} from "@/components/ui/card.tsx";
@@ -13,6 +13,7 @@ import {TooltipProvider} from "@/components/ui/tooltip.tsx";
 type ChapterResponse = {
     id: string;
     title: string;
+    position: number;
 
     createdAt?: string | null;
     updatedAt?: string | null;
@@ -23,21 +24,50 @@ type ChapterResponse = {
 type SectionResponse = {
     id: string;
     title: string;
+    position: number;
     chapters: ChapterResponse[];
+
     createdAt?: string | null;
     updatedAt?: string | null;
 };
 
-type CourseStatusEnum = "DRAFT" | "WAITING_VALIDATION" | "VALIDATED" | "REJECTED" | "PUBLISHED";
+type CourseStatusEnum =
+    | "DRAFT"
+    | "WAITING_VALIDATION"
+    | "VALIDATED"
+    | "REJECTED"
+    | "PUBLISHED";
 
 export type CourseResponse = {
     id: string;
     title: string;
     description: string;
     status: CourseStatusEnum;
+    price?: number | null;
     sections: SectionResponse[];
     createdAt?: string | null;
     updatedAt?: string | null;
+};
+
+// Backend UpdateCourseRequest (PATCH-like)
+type UpdateCourseRequest = {
+    title?: string | null;
+    description?: string | null;
+    price?: number | null;
+    sections?: UpdateSectionRequest[] | null;
+};
+
+type UpdateSectionRequest = {
+    id?: string | null;
+    title?: string | null;
+    position?: number | null;
+    chapters?: UpdateChapterRequest[] | null;
+};
+
+type UpdateChapterRequest = {
+    id?: string | null;
+    title?: string | null;
+    position?: number | null;
 };
 
 type CourseBuilderContextValue = {
@@ -52,6 +82,7 @@ type CourseBuilderContextValue = {
 
 const CourseBuilderContext = createContext<CourseBuilderContextValue | null>(null);
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useCourseBuilder(): CourseBuilderContextValue {
     const ctx = useContext(CourseBuilderContext);
     if (ctx === null) {
@@ -67,6 +98,10 @@ export default function CourseBuilderLayout() {
     const resolvedCourseId = courseId ?? "";
 
     const [course, setCourse] = useState<CourseResponse | null>(null);
+    // IMPORTANT: keep the Outlet mounted.
+    // "loading" is only for the FIRST fetch (course=null).
+    // Background refreshes (polling, manual refresh) DO NOT change loading state,
+    // otherwise the Outlet unmounts/remounts and triggers an infinite refresh loop.
     const [loading, setLoading] = useState<boolean>(true);
     const [saving, setSaving] = useState<boolean>(false);
 
@@ -83,20 +118,76 @@ export default function CourseBuilderLayout() {
         }
     }, [location.pathname]);
 
-    async function refreshCourse(): Promise<void> {
+    const refreshCourse = useCallback(async (): Promise<void> => {
         if (!resolvedCourseId) {
             setCourse(null);
             setLoading(false);
             return;
         }
 
-        setLoading(true);
+        // Use functional update to avoid depending on `course` in useCallback deps.
+        // This prevents infinite loops: refreshCourse reference stays stable across renders.
+        setCourse((prevCourse) => {
+            // Set loading state only on first fetch (when prevCourse is null)
+            if (prevCourse === null) {
+                setLoading(true);
+            }
+            // For subsequent refreshes (polling, manual), keep the UI mounted by NOT changing loading state
+            return prevCourse;
+        });
+
         try {
+            // IMPORTANT: axios baseURL already contains "/api".
+            // So routes MUST NOT start with "/api".
             const res = await api.get(`/course/${resolvedCourseId}`);
             setCourse(res.data as CourseResponse);
         } finally {
             setLoading(false);
         }
+    }, [resolvedCourseId]);
+
+    function mapPartialToUpdateRequest(partial: Partial<CourseResponse>): UpdateCourseRequest {
+        const req: UpdateCourseRequest = {};
+
+        if (partial.title !== undefined) {
+            req.title = partial.title ?? null;
+        }
+
+        if (partial.description !== undefined) {
+            req.description = partial.description ?? null;
+        }
+
+        // Free course: price can be 0. Null/undefined means "no update" or "unset in UI".
+        if (partial.price !== undefined) {
+            if (partial.price === null || partial.price === undefined) {
+                req.price = null;
+            } else {
+                req.price = Number(partial.price);
+            }
+        }
+
+        if (partial.sections !== undefined) {
+            if (partial.sections === null) {
+                req.sections = null;
+            } else {
+                req.sections = (partial.sections ?? []).map((s) => {
+                    return {
+                        id: s.id ?? null,
+                        title: s.title ?? null,
+                        position: (s as SectionResponse).position ?? null,
+                        chapters: ((s as SectionResponse).chapters ?? []).map((c) => {
+                            return {
+                                id: c.id ?? null,
+                                title: c.title ?? null,
+                                position: c.position ?? null,
+                            };
+                        }),
+                    };
+                });
+            }
+        }
+
+        return req;
     }
 
     async function saveCourse(partial: Partial<CourseResponse>): Promise<CourseResponse | null> {
@@ -106,19 +197,27 @@ export default function CourseBuilderLayout() {
 
         setSaving(true);
         try {
-            const payload = {
-                ...(course ?? {}),
-                ...partial,
-                id: resolvedCourseId,
-            };
+            const payload = mapPartialToUpdateRequest(partial);
 
+            // IMPORTANT: axios baseURL already contains "/api".
+            // So routes MUST NOT start with "/api".
             const res = await api.put(`/course/${resolvedCourseId}`, payload);
+
             const updated = res.data as CourseResponse;
             setCourse(updated);
             return updated;
         } finally {
             setSaving(false);
         }
+    }
+
+    async function handleSaveCourse(): Promise<void> {
+        if (!course) {
+            return;
+        }
+
+        // Persist ONLY what is impacted by the builder right now (ordering + titles if updated later)
+        await saveCourse({sections: course.sections});
     }
 
     useEffect(() => {
@@ -136,7 +235,7 @@ export default function CourseBuilderLayout() {
             refreshCourse,
             saveCourse,
         };
-    }, [resolvedCourseId, course, loading, saving]);
+    }, [resolvedCourseId, course, loading, saving, refreshCourse]);
 
     if (!resolvedCourseId) {
         return (
@@ -159,39 +258,54 @@ export default function CourseBuilderLayout() {
                                     label="Sections & chapitres"
                                     active={activeTab === "sections"}
                                 />
-                                <TabLink to="resources" label="Ressources" active={activeTab === "resources"}/>
-                                <TabLink to="settings" label="Paramètres" active={activeTab === "settings"}/>
+                                <TabLink
+                                    to="resources"
+                                    label="Ressources"
+                                    active={activeTab === "resources"}
+                                />
+                                <TabLink
+                                    to="settings"
+                                    label="Paramètres"
+                                    active={activeTab === "settings"}
+                                />
                             </div>
 
                             <div className="ml-auto flex items-center gap-3">
-                                {loading ? (
-                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                        <Loader2 className="h-4 w-4 animate-spin"/>
-                                        Loading
-                                    </div>
-                                ) : null}
-
-                                {saving ? (
-                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                        <Loader2 className="h-4 w-4 animate-spin"/>
-                                        Saving
-                                    </div>
-                                ) : null}
-
                                 {course ? (
-                                    <Badge
-                                        variant="outline"
-                                        className="rounded-full px-3 py-1 text-xs font-semibold"
-                                    >
+                                    <Badge variant="outline" className="rounded-full px-3 py-1 text-xs font-semibold">
                                         {course.status}
                                     </Badge>
                                 ) : null}
+
+                                <Button
+                                    size="sm"
+                                    onClick={() => void handleSaveCourse()}
+                                    disabled={loading || saving || !course}
+                                    className="h-9 rounded-lg"
+                                >
+                                    {saving ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin"/>
+                                            Saving
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Save className="mr-2 h-4 w-4"/>
+                                            Save course
+                                        </>
+                                    )}
+                                </Button>
                             </div>
                         </div>
                     </Card>
 
                     <div className="mt-6">
-                        {loading ? (
+                        {/*
+                          Keep the Outlet mounted.
+                          If we unmount it during background refreshes, hooks like useCoursePolling re-mount and
+                          immediately call refreshCourse again, causing a tight refresh loop.
+                        */}
+                        {loading && course === null ? (
                             <div className="flex h-[55vh] items-center justify-center">
                                 <Loader2 className="h-6 w-6 animate-spin"/>
                             </div>
@@ -211,10 +325,7 @@ function TabLink(props: { to: string; label: string; active: boolean }) {
             variant={props.active ? "secondary" : "ghost"}
             size="sm"
             asChild
-            className={cn(
-                "h-9 rounded-lg px-4",
-                props.active ? "shadow-sm" : "text-muted-foreground"
-            )}
+            className={cn("h-9 rounded-lg px-4", props.active ? "shadow-sm" : "text-muted-foreground")}
         >
             <NavLink to={props.to} end>
                 {props.label}
@@ -222,4 +333,3 @@ function TabLink(props: { to: string; label: string; active: boolean }) {
         </Button>
     );
 }
-

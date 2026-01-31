@@ -1,5 +1,5 @@
 import {VideoStatusEnum} from "@/types/video.ts";
-import {useEffect, useRef} from "react";
+import {useEffect, useMemo, useRef} from "react";
 
 type CourseLike = {
     sections?: Array<{
@@ -43,9 +43,19 @@ function hasProcessingVideo(course: CourseLike | null | undefined): boolean {
     return false;
 }
 
+function clearTimer(timerRef: React.MutableRefObject<number | null>) {
+    if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+    }
+}
+
 /**
  * Polls refreshCourse() while at least one video is in PROCESSING state.
- * Source of truth remains GET /course/{courseId}.
+ *
+ * Fix (critical):
+ * - Do NOT restart polling on every `course` update.
+ * - Only react to `shouldPoll` boolean (enter/exit PROCESSING).
  */
 export function useCoursePolling(
     course: CourseLike | null,
@@ -55,51 +65,93 @@ export function useCoursePolling(
     const enabled = options?.enabled ?? true;
     const intervalMs = options?.intervalMs ?? 3000;
 
-    const intervalRef = useRef<number | null>(null);
+    const timerRef = useRef<number | null>(null);
     const inFlightRef = useRef<boolean>(false);
+
+    const courseRef = useRef<CourseLike | null>(course);
+    const refreshRef = useRef<() => Promise<void>>(refreshCourse);
+    const enabledRef = useRef<boolean>(enabled);
+    const intervalRef = useRef<number>(intervalMs);
+
+    useEffect(() => {
+        courseRef.current = course;
+    }, [course]);
+
+    useEffect(() => {
+        refreshRef.current = refreshCourse;
+    }, [refreshCourse]);
+
+    useEffect(() => {
+        enabledRef.current = enabled;
+        if (!enabled) {
+            clearTimer(timerRef);
+        }
+    }, [enabled]);
+
+    useEffect(() => {
+        intervalRef.current = intervalMs;
+    }, [intervalMs]);
+
+    const shouldPoll = useMemo(() => {
+        return hasProcessingVideo(course);
+    }, [course]);
+
+    const scheduleNext = () => {
+        clearTimer(timerRef);
+        timerRef.current = window.setTimeout(() => {
+            void tick();
+        }, intervalRef.current);
+    };
+
+    const tick = async () => {
+        if (!enabledRef.current) {
+            clearTimer(timerRef);
+            return;
+        }
+
+        const stillProcessing = hasProcessingVideo(courseRef.current);
+        if (!stillProcessing) {
+            clearTimer(timerRef);
+            return;
+        }
+
+        if (inFlightRef.current) {
+            scheduleNext();
+            return;
+        }
+
+        inFlightRef.current = true;
+        try {
+            await refreshRef.current();
+        } finally {
+            inFlightRef.current = false;
+        }
+
+        scheduleNext();
+    };
 
     useEffect(() => {
         if (!enabled) {
-            if (intervalRef.current !== null) {
-                window.clearInterval(intervalRef.current);
-                intervalRef.current = null;
-            }
+            clearTimer(timerRef);
             return;
         }
-
-        const shouldPoll = hasProcessingVideo(course);
 
         if (!shouldPoll) {
-            if (intervalRef.current !== null) {
-                window.clearInterval(intervalRef.current);
-                intervalRef.current = null;
-            }
+            clearTimer(timerRef);
             return;
         }
 
-        if (intervalRef.current !== null) {
-            // already polling
+        // Already started -> do not restart on rerenders
+        if (timerRef.current !== null) {
             return;
         }
 
-        intervalRef.current = window.setInterval(async () => {
-            if (inFlightRef.current) {
-                return;
-            }
-
-            inFlightRef.current = true;
-            try {
-                await refreshCourse();
-            } finally {
-                inFlightRef.current = false;
-            }
-        }, intervalMs);
+        // Start once when entering PROCESSING
+        void tick();
 
         return () => {
-            if (intervalRef.current !== null) {
-                window.clearInterval(intervalRef.current);
-                intervalRef.current = null;
-            }
+            clearTimer(timerRef);
         };
-    }, [enabled, intervalMs, course, refreshCourse]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [enabled, shouldPoll, intervalMs]);
 }

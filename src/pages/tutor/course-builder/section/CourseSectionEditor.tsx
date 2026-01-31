@@ -10,17 +10,14 @@
  */
 import {ChapterVideoPanel} from "@/components/courseBuilder/ChapterVideoPanel.tsx";
 import {useCoursePolling} from "@/hooks/useCoursePolling.ts";
-import {useMemo} from "react";
+import {Dispatch, SetStateAction, useMemo} from "react";
 import {Badge} from "@/components/ui/badge.tsx";
-import {Separator} from "@radix-ui/react-dropdown-menu";
 import {Accordion} from "@/components/ui/accordion.tsx";
 import {ArrowDown, ArrowUp} from "lucide-react";
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card.tsx";
 import {MoveButton} from "@/components/MoveButton.tsx";
 import {useSectionsOrder} from "@/pages/tutor/course-builder/section/useSectionsOrder.ts";
 import SectionItem from "./SectionItem";
-
-/* ========= Types (local feature scope) ========= */
 
 export type ChapterLike = {
     id: string;
@@ -44,15 +41,35 @@ export type CourseLike = {
 type Props = {
     courseId: string;
     course: CourseLike;
-    setCourse: (next: CourseLike) => void;
+    setCourse: Dispatch<SetStateAction<CourseLike>>;
     refreshCourse: () => Promise<void>;
 };
+
+function hasProcessingVideo(course: CourseLike): boolean {
+    const sections = course.sections ?? [];
+
+    for (const section of sections) {
+        const chapters = section.chapters ?? [];
+        for (const chapter of chapters) {
+            const status = chapter.video?.status ?? null;
+            if (status === "PROCESSING") {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
 
 export default function CourseSectionsEditor(props: Props) {
     const {courseId, course, setCourse, refreshCourse} = props;
 
-    // Keeps video statuses fresh while processing (backend polling updates)
-    useCoursePolling(course as any, refreshCourse, {enabled: true, intervalMs: 3000});
+    // Enable polling ONLY when at least one video is PROCESSING.
+    const shouldPoll = useMemo(() => {
+        return hasProcessingVideo(course);
+    }, [course]);
+
+    useCoursePolling(course as any, refreshCourse, {enabled: shouldPoll, intervalMs: 3000});
 
     const sectionsSorted = useMemo<SectionLike[]>(() => {
         const raw = [...(course.sections ?? [])];
@@ -69,14 +86,16 @@ export default function CourseSectionsEditor(props: Props) {
     }, [course.sections]);
 
     const {moveSection, moveChapter} = useSectionsOrder(sectionsSorted, (nextSections) => {
-        setCourse({
-            ...course,
-            sections: nextSections,
+        // Use functional update to avoid stale closures and preserve the full course object.
+        setCourse((prev: any) => {
+            return {
+                ...prev,
+                sections: nextSections,
+            };
         });
     });
 
     return (
-
         <div className="space-y-6">
             {/* Header */}
             <div className="space-y-2">
@@ -100,7 +119,7 @@ export default function CourseSectionsEditor(props: Props) {
                     </div>
                 </div>
 
-                <Separator/>
+                <div className="h-px w-full bg-border"/>
             </div>
 
             {/* Content */}
@@ -123,8 +142,7 @@ export default function CourseSectionsEditor(props: Props) {
                                 onMoveDown={() => moveSection(sectionIndex, "DOWN")}
                             >
                                 {section.chapters.length === 0 ? (
-                                    <div
-                                        className="rounded-lg border bg-muted/10 p-4 text-sm text-muted-foreground">
+                                    <div className="rounded-lg border bg-muted/10 p-4 text-sm text-muted-foreground">
                                         Aucun chapitre dans cette section.
                                     </div>
                                 ) : (
@@ -159,11 +177,7 @@ export default function CourseSectionsEditor(props: Props) {
                                                                     onClick={(e) => {
                                                                         e.preventDefault();
                                                                         e.stopPropagation();
-                                                                        moveChapter(
-                                                                            sectionIndex,
-                                                                            chapterIndex,
-                                                                            "DOWN"
-                                                                        );
+                                                                        moveChapter(sectionIndex, chapterIndex, "DOWN");
                                                                     }}
                                                                     icon={<ArrowDown className="h-4 w-4"/>}
                                                                 />
@@ -192,7 +206,6 @@ export default function CourseSectionsEditor(props: Props) {
                 </Accordion>
             )}
         </div>
-
     );
 }
 

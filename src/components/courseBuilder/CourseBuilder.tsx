@@ -4,7 +4,7 @@ import CreateCourseForm from "@/components/courseBuilder/CourseForm.tsx";
 import {useState} from "react";
 
 export default function CourseBuilder() {
-    const {t} = useTranslation();
+    useTranslation();
     const [sections, setSections] = useState<any[]>([]);
 
     return (

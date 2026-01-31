@@ -1,5 +1,3 @@
-// src/components/courseBuilder/ChapterVideoPanel.tsx
-
 import {useCallback, useMemo, useRef, useState} from "react";
 import * as tus from "tus-js-client";
 
@@ -104,6 +102,8 @@ export function ChapterVideoPanel(props: Props) {
     }, [video?.id, initResult?.videoId]);
 
     const sourceUri = useMemo(() => {
+        // Backend is source of truth: sourceUri must come from refreshed course state.
+        // initResult may not include sourceUri by design.
         const fromVideo = typeof video?.sourceUri === "string" ? (video.sourceUri as string) : null;
         const fromInit = typeof initResult?.sourceUri === "string" ? initResult.sourceUri : null;
         return fromVideo ?? fromInit ?? null;
@@ -114,6 +114,22 @@ export function ChapterVideoPanel(props: Props) {
         const fromInit = typeof initResult?.thumbnailUrl === "string" ? initResult.thumbnailUrl : null;
         return fromVideo ?? fromInit ?? null;
     }, [video?.thumbnailUrl, initResult?.thumbnailUrl]);
+
+    const embedHash = useMemo(() => {
+        // Backend is source of truth: embedHash comes from the refreshed course state.
+        // Keep it defensive because VideoResponse type may lag behind backend contract.
+        const v: any = video as any;
+        if (v && typeof v.embedHash === "string") {
+            const trimmed = v.embedHash.trim();
+            if (trimmed.length > 0) {
+                return trimmed;
+            } else {
+                return null;
+            }
+        } else {
+            return null;
+        }
+    }, [video]);
 
     const derivedVimeoId = useMemo(() => {
         return extractVimeoId(sourceUri ?? undefined);
@@ -133,56 +149,38 @@ export function ChapterVideoPanel(props: Props) {
 
     const startTusUpload = useCallback(
         async (selectedFile: File, init: InitVideoResponse) => {
-            if (!init.uploadUrl) {
-                setUploadState({kind: "error", message: "Missing uploadUrl from init response."});
+            if (!init || !init.uploadUrl) {
+                setUploadState({kind: "error", message: "INIT response missing uploadUrl."});
                 return;
             }
 
+            stopCurrentUpload();
             setUploadState({kind: "uploading", percent: 0});
 
             const upload = new tus.Upload(selectedFile, {
-                uploadUrl: init.uploadUrl,
+                endpoint: init.uploadUrl,
                 retryDelays: [0, 1000, 3000, 5000],
                 metadata: {
                     filename: selectedFile.name,
                     filetype: selectedFile.type,
                 },
                 onError: (error) => {
-                    setUploadState({
-                        kind: "error",
-                        message: error?.message ?? "Upload failed.",
-                    });
+                    setUploadState({kind: "error", message: error?.message ?? "Upload failed."});
                 },
                 onProgress: (bytesUploaded, bytesTotal) => {
-                    if (bytesTotal <= 0) {
-                        return;
+                    if (bytesTotal > 0) {
+                        const percent = Math.round((bytesUploaded / bytesTotal) * 100);
+                        setUploadState({kind: "uploading", percent});
                     }
-                    const percent = Math.round((bytesUploaded / bytesTotal) * 100);
-                    setUploadState({kind: "uploading", percent});
                 },
                 onSuccess: async () => {
                     setUploadState({kind: "confirming"});
-
                     try {
-                        const initSourceUri = init.sourceUri;
-                        if (!initSourceUri || initSourceUri.trim().length === 0) {
-                            setUploadState({
-                                kind: "error",
-                                message: "Upload finished but init response did not provide a sourceUri.",
-                            });
-                            return;
-                        }
-
-                        await confirmVideo({
-                            courseId,
-                            sectionId,
-                            chapterId,
-                            sourceUri: initSourceUri,
-                        });
+                        await confirmVideo({courseId, sectionId, chapterId});
 
                         setUploadState({kind: "done"});
 
-                        if (onRefresh) {
+                        if (typeof onRefresh === "function") {
                             await onRefresh();
                         }
                     } catch (e: any) {
@@ -195,19 +193,33 @@ export function ChapterVideoPanel(props: Props) {
             });
 
             uploadRef.current = upload;
-            upload.start();
+
+            try {
+                upload.start();
+            } catch (e: any) {
+                setUploadState({kind: "error", message: e?.message ?? "Upload start failed."});
+            }
         },
-        [courseId, sectionId, chapterId, onRefresh]
+        [courseId, sectionId, chapterId, onRefresh, stopCurrentUpload]
     );
 
-    const handleInitAndUpload = useCallback(async () => {
+    const onPickFile = useCallback((evt: React.ChangeEvent<HTMLInputElement>) => {
+        const files = evt.target.files;
+        if (!files || files.length === 0) {
+            setFile(null);
+            return;
+        }
+        setFile(files[0]);
+    }, []);
+
+    const onInitUpload = useCallback(async () => {
         if (!file) {
-            setUploadState({kind: "error", message: "Select a video file first."});
+            setUploadState({kind: "error", message: "Choose a file first."});
             return;
         }
 
-        stopCurrentUpload();
         setUploadState({kind: "initializing"});
+        setInitResult(null);
 
         try {
             const init = await initVideo({
@@ -218,19 +230,16 @@ export function ChapterVideoPanel(props: Props) {
             });
 
             setInitResult(init);
-
             await startTusUpload(file, init);
         } catch (e: any) {
-            setUploadState({kind: "error", message: e?.message ?? "Init failed."});
+            setUploadState({
+                kind: "error",
+                message: e?.message ?? "Init failed.",
+            });
         }
-    }, [file, stopCurrentUpload, courseId, sectionId, chapterId, startTusUpload]);
+    }, [file, courseId, sectionId, chapterId, startTusUpload]);
 
-    const handleCancelUpload = useCallback(() => {
-        stopCurrentUpload();
-        setUploadState({kind: "idle"});
-    }, [stopCurrentUpload]);
-
-    const handlePublishRequest = useCallback(async () => {
+    const onPublish = useCallback(async () => {
         if (!currentVideoId) {
             return;
         }
@@ -239,97 +248,81 @@ export function ChapterVideoPanel(props: Props) {
         try {
             await publishVideo({videoId: currentVideoId});
 
-            if (onRefresh) {
+            if (typeof onRefresh === "function") {
                 await onRefresh();
             }
-        } catch (e: any) {
-            setUploadState({
-                kind: "error",
-                message: e?.message ?? "Publish request failed.",
-            });
         } finally {
             setPublishLoading(false);
         }
-    }, [currentVideoId, onRefresh]);
+    }, [currentVideoId, courseId, sectionId, chapterId, onRefresh]);
 
     const statusHint = useMemo(() => {
         if (!currentStatus) {
-            return "Aucune vidéo associée à ce chapitre.";
+            return "Aucune vidéo. Initialise un upload pour associer une vidéo à ce chapitre.";
         }
 
         if (currentStatus === "PENDING") {
-            return "Vidéo initialisée. Upload à effectuer.";
+            return "Vidéo en attente : upload non confirmé ou en cours de reprise.";
+        } else if (currentStatus === "UPLOADED") {
+            return "Upload terminé côté provider. En attente de traitement.";
         } else if (currentStatus === "PROCESSING") {
-            return "Upload confirmé. Traitement Vimeo en cours.";
-        } else if (currentStatus === "READY") {
-            return "Vidéo prête. Tu peux demander la publication (passage en revue).";
+            return "Traitement en cours côté Vimeo. Le backend poll automatiquement.";
         } else if (currentStatus === "IN_REVIEW") {
-            return "Demande envoyée. Vidéo en attente de validation admin.";
+            return "Vimeo demande une revue (privacy / contenus).";
+        } else if (currentStatus === "READY") {
+            return "Vidéo prête. Prévisualisation disponible.";
         } else if (currentStatus === "PUBLISHED") {
-            return "Vidéo publiée (visible côté étudiant).";
-        } else if (currentStatus === "REJECTED") {
-            return "Vidéo rejetée. Corrige et ré-uploade puis redemande la publication.";
+            return "Vidéo publiée.";
         } else if (currentStatus === "FAILED") {
-            return "Échec technique du traitement. Ré-uploade la vidéo.";
+            return "Traitement échoué.";
+        } else if (currentStatus === "REJECTED") {
+            return "Vidéo rejetée.";
         } else if (currentStatus === "EXPIRED") {
-            return "Upload expiré (confirm non reçu à temps). Ré-uploade la vidéo.";
+            return "Session d’upload expirée. Réinitialise l’upload.";
         } else {
-            return "";
+            return "État vidéo inconnu.";
         }
     }, [currentStatus]);
 
-    const errorMessage = useMemo(() => {
-        const fromLocal = uploadState.kind === "error" ? uploadState.message : null;
-        const fromVideo = typeof video?.errorMessage === "string" ? (video.errorMessage as string) : null;
-        const fromInit = typeof initResult?.errorMessage === "string" ? initResult.errorMessage : null;
-        return fromLocal ?? fromVideo ?? fromInit;
-    }, [uploadState, video?.errorMessage, initResult?.errorMessage]);
-
     const reviewMessage = useMemo(() => {
-        const v = video as any;
-        if (v && typeof v.reviewMessage === "string" && v.reviewMessage.trim().length > 0) {
-            return v.reviewMessage;
+        if (currentStatus === "IN_REVIEW") {
+            return "Vimeo a mis la vidéo en revue. Vérifie les paramètres privacy et les restrictions d’intégration.";
+        } else {
+            return null;
         }
-        return null;
-    }, [video]);
+    }, [currentStatus]);
 
-    const canStartUpload = useMemo(() => {
+    const canPublish = useMemo(() => {
         if (!currentStatus) {
-            return true;
+            return false;
         }
 
-        if (currentStatus === "PENDING") {
+        if (currentStatus === "READY") {
             return true;
+        } else if (currentStatus === "IN_REVIEW") {
+            return false;
+        } else if (currentStatus === "PUBLISHED") {
+            return false;
+        } else {
+            return false;
         }
-
-        if (currentStatus === "FAILED") {
-            return true;
-        }
-
-        if (currentStatus === "EXPIRED") {
-            return true;
-        }
-
-        if (currentStatus === "REJECTED") {
-            return true;
-        }
-
-        return false;
     }, [currentStatus]);
 
     return (
-        <Card className="border-muted/60">
-            <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-3">
+        <Card>
+            <CardHeader className="space-y-1">
+                <CardTitle className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                        <CardTitle className="text-base">Vidéo</CardTitle>
-                        {chapterTitle ? (
-                            <div className="mt-1 truncate text-xs text-muted-foreground">{chapterTitle}</div>
-                        ) : null}
+                        <div className="truncate">{chapterTitle ?? "Video"}</div>
+                        <div className="text-xs font-normal text-muted-foreground">
+                            Chapter: {chapterId}
+                        </div>
                     </div>
 
-                    <Badge variant={statusBadgeVariant(currentStatus)}>{formatStatusLabel(currentStatus)}</Badge>
-                </div>
+                    <Badge variant={statusBadgeVariant(currentStatus)}>
+                        {formatStatusLabel(currentStatus)}
+                    </Badge>
+                </CardTitle>
             </CardHeader>
 
             <CardContent className="space-y-4">
@@ -339,8 +332,13 @@ export function ChapterVideoPanel(props: Props) {
                 {canPreview(currentStatus) && sourceUri && derivedVimeoId ? (
                     <div className="space-y-2">
                         <div className="text-xs text-muted-foreground">Prévisualisation</div>
-                        <VimeoPlayer sourceUri={sourceUri} thumbnailUrl={thumbnailUrl} minimalUi={true}
-                                     autoplay={false}/>
+                        <VimeoPlayer
+                            sourceUri={sourceUri}
+                            embedHash={embedHash}
+                            thumbnailUrl={thumbnailUrl}
+                            minimalUi={true}
+                            autoplay={false}
+                        />
                     </div>
                 ) : null}
 
@@ -350,92 +348,95 @@ export function ChapterVideoPanel(props: Props) {
                     </div>
                 ) : null}
 
-                {errorMessage ? (
-                    <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                        {errorMessage}
-                    </div>
-                ) : null}
+                <div className="space-y-2 rounded-lg border p-3">
+                    <div className="text-sm font-medium">Upload</div>
 
-                {/* Actions: Publish request */}
-                {currentStatus === "READY" && currentVideoId ? (
-                    <div className="flex items-center gap-2">
-                        <Button type="button" onClick={handlePublishRequest} disabled={publishLoading}>
-                            {publishLoading ? "Envoi…" : "Demander publication"}
+                    <div className="grid gap-2">
+                        <Label htmlFor="videoFile">Fichier vidéo</Label>
+                        <Input
+                            id="videoFile"
+                            type="file"
+                            accept="video/*"
+                            onChange={onPickFile}
+                        />
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                            type="button"
+                            onClick={onInitUpload}
+                            disabled={
+                                !file ||
+                                uploadState.kind === "initializing" ||
+                                uploadState.kind === "uploading" ||
+                                uploadState.kind === "confirming"
+                            }
+                        >
+                            Init + Upload + Confirm
+                        </Button>
+
+                        {canPublish ? (
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={onPublish}
+                                disabled={publishLoading}
+                            >
+                                {publishLoading ? "Publishing..." : "Publish"}
+                            </Button>
+                        ) : (
+                            <Button type="button" variant="secondary" disabled={true}>
+                                Publish
+                            </Button>
+                        )}
+
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                                stopCurrentUpload();
+                                setUploadState({kind: "idle"});
+                                setInitResult(null);
+                                setFile(null);
+                            }}
+                        >
+                            Reset
                         </Button>
                     </div>
-                ) : null}
 
-                {/* Upload controls */}
-                {canStartUpload ? (
-                    <div className="space-y-2">
-                        <Label className="text-sm">Fichier vidéo</Label>
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                            <Input
-                                type="file"
-                                accept="video/*"
-                                onChange={(e) => {
-                                    const f = e.target.files?.[0] ?? null;
-                                    setFile(f);
-                                    setUploadState({kind: "idle"});
-                                }}
-                            />
-
-                            <div className="flex items-center gap-2">
-                                <Button
-                                    type="button"
-                                    onClick={handleInitAndUpload}
-                                    disabled={
-                                        !file ||
-                                        uploadState.kind === "initializing" ||
-                                        uploadState.kind === "uploading" ||
-                                        uploadState.kind === "confirming"
-                                    }
-                                >
-                                    {currentStatus === "FAILED" || currentStatus === "EXPIRED" || currentStatus === "REJECTED"
-                                        ? "Ré-uploader"
-                                        : "Démarrer"}
-                                </Button>
-
-                                {uploadState.kind === "uploading" || uploadState.kind === "confirming" ? (
-                                    <Button type="button" variant="secondary" onClick={handleCancelUpload}>
-                                        Annuler
-                                    </Button>
-                                ) : null}
-                            </div>
-                        </div>
+                    <div className="text-sm text-muted-foreground">
+                        {uploadState.kind === "idle" ? (
+                            <div>En attente.</div>
+                        ) : null}
 
                         {uploadState.kind === "initializing" ? (
-                            <div className="text-xs text-muted-foreground">Initialisation…</div>
+                            <div>INIT en cours…</div>
                         ) : null}
 
                         {uploadState.kind === "uploading" ? (
-                            <div className="space-y-2">
-                                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                                    <span>Upload Vimeo (TUS)</span>
-                                    <span>{uploadState.percent}%</span>
-                                </div>
-                                <div className="h-2 w-full rounded-full bg-muted">
-                                    <div className="h-2 rounded-full bg-primary"
-                                         style={{width: `${uploadState.percent}%`}}/>
-                                </div>
-                            </div>
+                            <div>Upload en cours… {uploadState.percent}%</div>
                         ) : null}
 
                         {uploadState.kind === "confirming" ? (
-                            <div className="text-xs text-muted-foreground">Confirmation…</div>
+                            <div>CONFIRM en cours…</div>
                         ) : null}
 
-                        {initResult?.uploadExpiresAt ? (
-                            <div className="text-xs text-muted-foreground">
-                                Expire: {new Date(initResult.uploadExpiresAt).toLocaleString()}
-                            </div>
+                        {uploadState.kind === "done" ? (
+                            <div>Upload terminé. Rafraîchis le cours si besoin.</div>
+                        ) : null}
+
+                        {uploadState.kind === "error" ? (
+                            <div className="text-destructive">Erreur: {uploadState.message}</div>
                         ) : null}
                     </div>
-                ) : (
-                    <div className="rounded-lg border bg-muted/10 p-3 text-xs text-muted-foreground">
-                        Actions désactivées pour ce statut.
+
+                    <div className="space-y-1 text-xs text-muted-foreground">
+                        <div>VideoId: {currentVideoId ?? "-"}</div>
+                        <div>SourceUri: {sourceUri ?? "-"}</div>
+                        <div>VimeoId: {derivedVimeoId ?? "-"}</div>
+                        <div>EmbedHash: {embedHash ?? "-"}</div>
                     </div>
-                )}
+                </div>
             </CardContent>
         </Card>
     );

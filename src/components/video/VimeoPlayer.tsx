@@ -1,5 +1,5 @@
-import Player from "@vimeo/player";
-import {useEffect, useMemo, useRef, useState} from "react";
+import {useMemo, useState} from "react";
+import {buildVimeoPlayerUrlFromSourceUri, DEFAULT_VIMEO_PLAYER_PARAMS, extractVimeoId,} from "@/types/video";
 
 type Props = {
     /**
@@ -8,8 +8,14 @@ type Props = {
     sourceUri: string;
 
     /**
-     * Optional poster image. If provided, Vimeo can still show its own poster;
-     * we keep it mainly for fallback UI.
+     * Backend-provided hash required for restricted/unlisted embeds.
+     * This must be preferred over any UI env map.
+     * Example: "0c7b965c73"
+     */
+    embedHash?: string | null;
+
+    /**
+     * Optional poster image used for fallback UI.
      */
     thumbnailUrl?: string | null;
 
@@ -30,29 +36,47 @@ type Props = {
     minimalUi?: boolean;
 
     /**
-     * Called when player fails to initialize or Vimeo rejects loading.
+     * Called when player fails to load (iframe error is limited; we simulate via onLoad/onError)
      */
     onError?: (message: string) => void;
 };
 
-function extractVimeoIdStrict(sourceUri: string): string | null {
-    const trimmed = sourceUri.trim();
-    if (!trimmed.startsWith("vimeo://")) {
-        return null;
+function readVimeoHashMapFromEnv(): Record<string, string> {
+    // English comment: Vimeo restricted embeds may require the "h" hash.
+    // This env map is a fallback only. Source of truth must be backend embedHash when available.
+    const raw = (import.meta as any).env?.VITE_VIMEO_EMBED_HASH_MAP;
+
+    if (!raw || typeof raw !== "string") {
+        return {};
     }
 
-    const id = trimmed.slice("vimeo://".length).trim();
-    if (!id) {
-        return null;
-    }
+    try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object") {
+            return {};
+        }
 
-    // Keep tolerant: some Vimeo ids are numeric, but we do not hard-validate.
-    return id;
+        const out: Record<string, string> = {};
+        for (const [k, v] of Object.entries(parsed)) {
+            if (typeof k === "string" && typeof v === "string") {
+                const kk = k.trim();
+                const vv = v.trim();
+                if (kk.length > 0 && vv.length > 0) {
+                    out[kk] = vv;
+                }
+            }
+        }
+
+        return out;
+    } catch {
+        return {};
+    }
 }
 
 export default function VimeoPlayer(props: Props) {
     const {
         sourceUri,
+        embedHash,
         thumbnailUrl,
         aspectRatioPercent,
         autoplay,
@@ -60,105 +84,92 @@ export default function VimeoPlayer(props: Props) {
         onError,
     } = props;
 
-    const ratio = typeof aspectRatioPercent === "number" && aspectRatioPercent > 0 ? aspectRatioPercent : 56.25;
+    const ratio =
+        typeof aspectRatioPercent === "number" && aspectRatioPercent > 0
+            ? aspectRatioPercent
+            : 56.25; // 16:9 default
+
     const shouldAutoplay = autoplay === true;
     const useMinimalUi = minimalUi !== false;
 
     const vimeoId = useMemo(() => {
-        return extractVimeoIdStrict(sourceUri);
+        return extractVimeoId(sourceUri);
     }, [sourceUri]);
 
-    const containerRef = useRef<HTMLDivElement | null>(null);
-    const playerRef = useRef<Player | null>(null);
-
-    const [initError, setInitError] = useState<string | null>(null);
-
-    useEffect(() => {
-        setInitError(null);
-
+    const privateHash = useMemo(() => {
         if (!vimeoId) {
-            const msg = "Invalid sourceUri. Expected format: vimeo://{id}";
-            setInitError(msg);
-            if (onError) {
-                onError(msg);
-            }
-            return;
+            return null;
         }
 
-        const el = containerRef.current;
-        if (!el) {
-            return;
+        // 1) Prefer backend-provided embedHash (source of truth)
+        if (typeof embedHash === "string") {
+            const trimmed = embedHash.trim();
+            if (trimmed.length > 0) {
+                return trimmed;
+            }
         }
 
-        // Cleanup any previous instance
-        if (playerRef.current) {
-            try {
-                playerRef.current.destroy();
-            } catch {
-                // ignore
-            }
-            playerRef.current = null;
+        // 2) Fallback to env map for MVP / legacy content
+        const map = readVimeoHashMapFromEnv();
+        const hash = map[vimeoId];
+
+        if (hash && hash.trim().length > 0) {
+            return hash.trim();
+        } else {
+            return null;
+        }
+    }, [vimeoId, embedHash]);
+
+    const iframeSrc = useMemo(() => {
+        if (!vimeoId) {
+            return null;
         }
 
-        // Create Vimeo Player instance
-        const player = new Player(el, {
-            id: vimeoId,
-            responsive: true,
-            autoplay: shouldAutoplay,
-            byline: useMinimalUi ? false : true,
-            title: useMinimalUi ? false : true,
-            portrait: useMinimalUi ? false : true,
-        });
-
-        playerRef.current = player;
-
-        player.on("error", (err: any) => {
-            const msg = err?.message ?? "Vimeo player error.";
-            setInitError(msg);
-            if (onError) {
-                onError(msg);
-            }
-        });
-
-        // Optional: try to load quickly to surface errors early
-        player
-            .ready()
-            .catch((e: any) => {
-                const msg = e?.message ?? "Failed to initialize Vimeo player.";
-                setInitError(msg);
-                if (onError) {
-                    onError(msg);
-                }
-            });
-
-        return () => {
-            if (playerRef.current) {
-                try {
-                    playerRef.current.destroy();
-                } catch {
-                    // ignore
-                }
-                playerRef.current = null;
-            }
+        const params = {
+            ...DEFAULT_VIMEO_PLAYER_PARAMS,
+            // Vimeo params are 0/1 typically, keep it consistent:
+            autoplay: shouldAutoplay ? 1 : 0,
         };
-    }, [vimeoId, shouldAutoplay, useMinimalUi, onError]);
 
-    if (!vimeoId) {
+        // If minimalUi is disabled, we keep defaults but allow Vimeo UI
+        if (!useMinimalUi) {
+            // English comment: removing these params lets Vimeo show standard UI elements.
+            delete (params as any).title;
+            delete (params as any).byline;
+            delete (params as any).portrait;
+            delete (params as any).badge;
+        }
+
+        return buildVimeoPlayerUrlFromSourceUri(sourceUri, {
+            privateHash,
+            params,
+        });
+    }, [vimeoId, sourceUri, privateHash, shouldAutoplay, useMinimalUi]);
+
+    const [failed, setFailed] = useState(false);
+
+    if (!iframeSrc) {
         return (
-            <div className="rounded-xl border bg-muted/10 p-4 text-sm text-muted-foreground">
-                Impossible de lire la vidéo : sourceUri invalide.
+            <div className="w-full rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
+                Impossible de construire l’URL Vimeo (sourceUri invalide).
             </div>
         );
     }
 
-    if (initError) {
+    if (failed) {
         return (
-            <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-                <div className="font-medium">Erreur Vimeo</div>
-                <div className="mt-1">{initError}</div>
+            <div className="w-full rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
+                <div className="font-medium text-foreground">Lecture indisponible</div>
+                <div className="mt-1">
+                    Vimeo a refusé l’intégration (embed restreint) ou l’iframe a échoué à charger.
+                </div>
                 {thumbnailUrl ? (
-                    <div className="mt-3 overflow-hidden rounded-lg border bg-white">
-                        <img src={thumbnailUrl} alt="Video thumbnail" className="h-auto w-full"/>
+                    <div className="mt-3">
+                        <img
+                            src={thumbnailUrl}
+                            alt="Vignette vidéo"
+                            className="w-full rounded-lg border object-cover"
+                        />
                     </div>
                 ) : null}
             </div>
@@ -166,10 +177,27 @@ export default function VimeoPlayer(props: Props) {
     }
 
     return (
-        <div className="w-full">
-            <div className="relative w-full overflow-hidden rounded-xl border bg-black">
-                <div style={{paddingTop: `${ratio}%`}}/>
-                <div ref={containerRef} className="absolute inset-0"/>
+        <div className="w-full overflow-hidden rounded-xl border bg-black">
+            <div
+                className="relative w-full"
+                style={{paddingTop: `${ratio}%`}}
+            >
+                <iframe
+                    src={iframeSrc}
+                    className="absolute inset-0 h-full w-full"
+                    allow="autoplay; fullscreen; picture-in-picture"
+                    allowFullScreen
+                    title="Vimeo player"
+                    onLoad={() => {
+                        // English comment: onLoad does not guarantee playback, but at least iframe loaded.
+                    }}
+                    onError={() => {
+                        setFailed(true);
+                        if (typeof onError === "function") {
+                            onError("Vimeo iframe failed to load.");
+                        }
+                    }}
+                />
             </div>
         </div>
     );

@@ -1,4 +1,4 @@
-import {useCallback, useMemo, useRef, useState} from "react";
+import {ChangeEvent, useCallback, useMemo, useRef, useState} from "react";
 import * as tus from "tus-js-client";
 
 import {Badge} from "@/components/ui/badge";
@@ -158,7 +158,13 @@ export function ChapterVideoPanel(props: Props) {
             setUploadState({kind: "uploading", percent: 0});
 
             const upload = new tus.Upload(selectedFile, {
-                endpoint: init.uploadUrl,
+                /**
+                 * CRITICAL FIX:
+                 * init.uploadUrl is a pre-created TUS resource URL:
+                 * - Using "endpoint" makes tus-js-client send POST (create) -> Vimeo returns 405
+                 * - Using "uploadUrl" makes tus-js-client send PATCH (upload chunks) -> correct
+                 */
+                uploadUrl: init.uploadUrl,
                 retryDelays: [0, 1000, 3000, 5000],
                 metadata: {
                     filename: selectedFile.name,
@@ -171,6 +177,8 @@ export function ChapterVideoPanel(props: Props) {
                     if (bytesTotal > 0) {
                         const percent = Math.round((bytesUploaded / bytesTotal) * 100);
                         setUploadState({kind: "uploading", percent});
+                    } else {
+                        setUploadState({kind: "uploading", percent: 0});
                     }
                 },
                 onSuccess: async () => {
@@ -203,7 +211,7 @@ export function ChapterVideoPanel(props: Props) {
         [courseId, sectionId, chapterId, onRefresh, stopCurrentUpload]
     );
 
-    const onPickFile = useCallback((evt: React.ChangeEvent<HTMLInputElement>) => {
+    const onPickFile = useCallback((evt: ChangeEvent<HTMLInputElement>) => {
         const files = evt.target.files;
         if (!files || files.length === 0) {
             setFile(null);
@@ -254,7 +262,7 @@ export function ChapterVideoPanel(props: Props) {
         } finally {
             setPublishLoading(false);
         }
-    }, [currentVideoId, courseId, sectionId, chapterId, onRefresh]);
+    }, [currentVideoId, onRefresh]);
 
     const statusHint = useMemo(() => {
         if (!currentStatus) {

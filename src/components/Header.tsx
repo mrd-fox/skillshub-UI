@@ -13,7 +13,7 @@ import {
 import {Button} from "@/components/ui/button.tsx";
 import {useLocation, useNavigate} from "react-router-dom";
 import {TutorRequestDialog} from "@/components/tutor/TutorRequestDialog.tsx";
-import api from "@/lib/axios.ts";
+import api from "@/api/axios.ts";
 import {toast} from "sonner";
 
 interface HeaderProps {

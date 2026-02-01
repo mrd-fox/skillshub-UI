@@ -1,6 +1,6 @@
 import {useEffect, useState} from "react";
 import {useLocation, useParams} from "react-router-dom";
-import api from "@/lib/axios";
+import api from "@/api/axios.ts";
 import {Input} from "@/components/ui/input";
 import {Textarea} from "@/components/ui/textarea";
 import {Button} from "@/components/ui/button";

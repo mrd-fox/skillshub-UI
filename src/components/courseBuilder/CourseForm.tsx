@@ -1,5 +1,5 @@
 // src/components/courseBuilder/CreateCourseForm.tsx
-import api from "@/lib/axios";
+import api from "@/api/axios.ts";
 import {useState} from "react";
 import {z} from "zod";
 import {Button} from "@/components/ui/button";

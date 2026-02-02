@@ -8,7 +8,7 @@ import {Button} from "@/components/ui/button.tsx";
 import {Card} from "@/components/ui/card.tsx";
 import {Badge} from "@/components/ui/badge.tsx";
 import {cn} from "@/lib/utils.ts";
-import {TooltipProvider} from "@/components/ui/tooltip.tsx";
+import {TooltipProvider} from "@/components/ui/tooltip";
 
 type ChapterResponse = {
     id: string;

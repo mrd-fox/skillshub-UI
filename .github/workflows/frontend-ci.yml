@@ -107,6 +107,8 @@ jobs:
 
       - name: Cypress E2E (headless)
         uses: cypress-io/github-action@v6
+        env:
+          CYPRESS_BASE_URL: http://localhost:4173
         with:
           start: npm run preview -- --host 0.0.0.0 --port 4173 --strictPort
           wait-on: http://localhost:4173
@@ -129,7 +131,6 @@ jobs:
           name: cypress-videos
           if-no-files-found: ignore
           path: cypress/videos
-
   sonar:
     name: Sonar (Frontend)
     runs-on: ubuntu-latest

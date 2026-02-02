@@ -13,8 +13,8 @@ import {useEffect} from "react";
 
 function LoginRedirect() {
     useEffect(() => {
-        // window.location.href = "/api/auth/login";
-        window.location.assign("/api/auth/login");
+        window.location.href = "/api/auth/login";
+        //window.location.assign("/api/auth/login");
     }, []);
 
     return null;

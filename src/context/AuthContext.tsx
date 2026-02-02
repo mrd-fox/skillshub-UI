@@ -1,4 +1,5 @@
-import {createContext, ReactNode, useContext, useEffect, useMemo, useState,} from "react";
+import {createContext, ReactNode, useContext, useEffect, useMemo, useState} from "react";
+import api, {ApiError} from "@/api/axios";
 
 export interface AuthContextType {
     loading: boolean;
@@ -61,7 +62,6 @@ export function AuthProvider({children}: { children: ReactNode }) {
 
     const [activeRole, setActiveRole] = useState<string | null>(null);
 
-    // Single source of truth for roles = internalUser.roles
     const roles = useMemo(() => {
         if (internalUser && Array.isArray(internalUser.roles)) {
             return internalUser.roles;
@@ -79,7 +79,6 @@ export function AuthProvider({children}: { children: ReactNode }) {
     };
 
     const resolveDefaultRole = (currentRoles: string[]) => {
-        // Priority: ADMIN > TUTOR > STUDENT
         if (currentRoles.includes("ADMIN")) {
             return "ADMIN";
         } else if (currentRoles.includes("TUTOR")) {
@@ -92,71 +91,82 @@ export function AuthProvider({children}: { children: ReactNode }) {
     };
 
     useEffect(() => {
-        async function bootstrap() {
-            try {
-                const authRes = await fetch(`${API_ROOT}/auth/me`, {
-                    credentials: "include",
-                });
+        let cancelled = false;
 
-                if (!authRes.ok) {
+        async function bootstrap() {
+            setLoading(true);
+
+            try {
+                // 1) Auth state from Gateway (/auth/me)
+                const authRes = await api.get<AuthUser>("/auth/me");
+
+                if (cancelled) {
+                    return;
+                }
+
+                setAuthUser(authRes.data);
+                setIsAuthenticated(true);
+
+                // 2) Internal user from Gateway (/users/me)
+                // Current contract may still return an envelope. We'll consume it safely.
+                const userRes = await api.get<InternalUserEnvelope>("/users/me");
+
+                if (cancelled) {
+                    return;
+                }
+
+                const envelope = userRes.data;
+                const user = envelope.user;
+
+                const assignedRoles = (user.roles ?? []).map((r) => r.name);
+
+                const mappedInternal: InternalUser = {
+                    id: user.id,
+                    keycloakId: user.externalId,
+                    email: user.email,
+                    roles: assignedRoles,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    active: user.active,
+                };
+
+                setInternalUser(mappedInternal);
+
+                // Do not overwrite user's activeRole unless missing or invalid
+                const defaultRole = resolveDefaultRole(assignedRoles);
+                if (defaultRole && (!activeRole || !assignedRoles.includes(activeRole))) {
+                    setActiveRole(defaultRole);
+                }
+            } catch (e) {
+                const err = e as ApiError;
+
+                // Important: interceptor already handles 401 (toast + redirect).
+                // Here we only reset local state in a clean way.
+                if (!cancelled) {
                     setIsAuthenticated(false);
                     setAuthUser(null);
                     setInternalUser(null);
                     setActiveRole(null);
-                    return;
+
+                    // No console logs, no backend messages displayed.
+                    // We deliberately do not surface err.message here (AuthContext is not a UI screen).
+                    void err;
                 }
-
-                const auth: AuthUser = await authRes.json();
-                setAuthUser(auth);
-                setIsAuthenticated(true);
-
-                const userRes = await fetch(`${API_ROOT}/users/me`, {
-                    credentials: "include",
-                });
-
-                if (userRes.ok) {
-                    const envelope: InternalUserEnvelope = await userRes.json();
-
-                    const user = envelope.user;
-                    const assignedRoles = (user.roles ?? []).map((r) => r.name);
-
-                    const mappedInternal: InternalUser = {
-                        id: user.id,
-                        keycloakId: user.externalId,
-                        email: user.email,
-                        roles: assignedRoles,
-                        firstName: user.firstName,
-                        lastName: user.lastName,
-                        active: user.active,
-                    };
-
-                    setInternalUser(mappedInternal);
-
-                    // Do not overwrite user's activeRole unless missing or invalid
-                    const defaultRole = resolveDefaultRole(assignedRoles);
-                    if (defaultRole && (!activeRole || !assignedRoles.includes(activeRole))) {
-                        setActiveRole(defaultRole);
-                    }
-                } else {
-                    setInternalUser(null);
-                    setActiveRole(null);
-                }
-            } catch (err) {
-                console.error("Auth bootstrap failed:", err);
-                setIsAuthenticated(false);
-                setAuthUser(null);
-                setInternalUser(null);
-                setActiveRole(null);
             } finally {
-                setLoading(false);
+                if (!cancelled) {
+                    setLoading(false);
+                }
             }
         }
 
         bootstrap();
+
+        return () => {
+            cancelled = true;
+        };
     }, [API_ROOT]);
 
     useEffect(() => {
-        // Ensure activeRole remains consistent after internalUser changes (e.g., tutor promotion)
         if (!internalUser) {
             return;
         }

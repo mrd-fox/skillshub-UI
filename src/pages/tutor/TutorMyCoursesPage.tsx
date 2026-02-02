@@ -1,13 +1,12 @@
-// src/pages/tutor/TutorMyCoursesPage.tsx
-import * as React from "react";
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import {useEffect, useMemo, useState} from "react";
+import {useNavigate} from "react-router-dom";
+import api from "@/api/axios";
 
-// shadcn/ui v0
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
+// shadcn/ui
+import {Card, CardContent, CardHeader} from "@/components/ui/card";
+import {Badge} from "@/components/ui/badge";
+import {Skeleton} from "@/components/ui/skeleton";
+import {Button} from "@/components/ui/button";
 
 type CourseStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED" | "PROCESSING" | "READY";
 
@@ -18,15 +17,18 @@ type CourseListItem = {
     updatedAt?: string;
 };
 
+type ApiError = {
+    status: number;
+    message: string;
+    raw?: unknown;
+};
+
 export default function TutorMyCoursesPage() {
     const navigate = useNavigate();
 
     const [loading, setLoading] = useState<boolean>(true);
     const [courses, setCourses] = useState<CourseListItem[]>([]);
     const [error, setError] = useState<string | null>(null);
-
-    const apiBaseUrl = (import.meta as any).env?.VITE_API_BASE_URL ?? "http://localhost:8080";
-    const listUrl = `${apiBaseUrl}/api/course`;
 
     useEffect(() => {
         let cancelled = false;
@@ -36,28 +38,19 @@ export default function TutorMyCoursesPage() {
             setError(null);
 
             try {
-                const res = await fetch(listUrl, {
-                    method: "GET",
-                    credentials: "include",
-                    headers: {
-                        Accept: "application/json",
-                    },
-                });
-
-                if (!res.ok) {
-                    const text = await res.text();
-                    throw new Error(text || `HTTP ${res.status}`);
-                }
-
-                const data = (await res.json()) as CourseListItem[];
+                // baseURL already contains "/api" (VITE_API_URL=http://.../api)
+                const res = await api.get<CourseListItem[]>("/course");
+                const data = res.data;
 
                 if (!cancelled) {
                     setCourses(Array.isArray(data) ? data : []);
                 }
             } catch (e) {
+                const err = e as ApiError;
+
+                // Message is already sanitized by axios interceptor (never show backend logs/messages)
                 if (!cancelled) {
-                    const message = e instanceof Error ? e.message : "Unknown error";
-                    setError(message);
+                    setError(typeof err?.message === "string" && err.message.length > 0 ? err.message : "Une erreur est survenue. Réessayez.");
                     setCourses([]);
                 }
             } finally {
@@ -72,11 +65,9 @@ export default function TutorMyCoursesPage() {
         return () => {
             cancelled = true;
         };
-    }, [listUrl]);
+    }, []);
 
     const skeletonItems = useMemo(() => {
-        // Skeleton while loading page. Status can't be “real” until data arrives.
-        // We keep a neutral status to preserve UI structure.
         return new Array(6).fill(null).map((_, idx) => {
             return {
                 id: `skeleton-${idx}`,
@@ -91,13 +82,14 @@ export default function TutorMyCoursesPage() {
     const items = useMemo(() => {
         if (loading) {
             return skeletonItems;
+        } else {
+            return courses.map((c) => {
+                return {
+                    ...c,
+                    __skeleton: false as const,
+                };
+            });
         }
-        return courses.map((c) => {
-            return {
-                ...c,
-                __skeleton: false as const,
-            };
-        });
     }, [loading, courses, skeletonItems]);
 
     return (
@@ -219,10 +211,7 @@ function CourseCard(props: {
                     }
                 }
             }}
-            className={[
-                "relative transition",
-                props.disabled ? "opacity-80" : "cursor-pointer hover:shadow-md",
-            ].join(" ")}
+            className={["relative transition", props.disabled ? "opacity-80" : "cursor-pointer hover:shadow-md"].join(" ")}
         >
             <div className="absolute right-3 top-3 z-10">
                 <Badge variant={statusVariant}>{statusLabel}</Badge>
@@ -230,46 +219,37 @@ function CourseCard(props: {
 
             {/* Thumbnail is always a skeleton: no image by design */}
             <CardHeader className="pb-2">
-                <Skeleton className="h-28 w-full rounded-md" />
+                <Skeleton className="h-28 w-full rounded-md"/>
             </CardHeader>
 
             <CardContent className="space-y-3">
-                {/* Title + meta */}
                 <div className="space-y-1">
                     {props.disabled ? (
-                        <Skeleton className="h-4 w-3/4" />
+                        <Skeleton className="h-4 w-3/4"/>
                     ) : (
                         <div className="text-sm font-semibold leading-tight line-clamp-2">{title}</div>
                     )}
 
-                    {props.disabled ? (
-                        <Skeleton className="h-3 w-1/2" />
-                    ) : (
-                        <div className="text-xs text-muted-foreground">{updatedLabel}</div>
-                    )}
+                    {props.disabled ? <Skeleton className="h-3 w-1/2"/> :
+                        <div className="text-xs text-muted-foreground">{updatedLabel}</div>}
                 </div>
 
-                {/* Body skeleton blocks (to match your mock style) */}
                 <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                        <Skeleton className="h-3 w-24" />
-                        <Skeleton className="h-3 w-10" />
+                        <Skeleton className="h-3 w-24"/>
+                        <Skeleton className="h-3 w-10"/>
                     </div>
-                    <Skeleton className="h-2 w-full rounded-full" />
+                    <Skeleton className="h-2 w-full rounded-full"/>
                 </div>
 
                 <div className="flex items-center justify-between">
-                    <Skeleton className="h-3 w-20" />
-                    <Skeleton className="h-3 w-24" />
+                    <Skeleton className="h-3 w-20"/>
+                    <Skeleton className="h-3 w-24"/>
                 </div>
 
-                {/* Call to action hint */}
                 <div className="pt-1">
-                    {props.disabled ? (
-                        <Skeleton className="h-3 w-28" />
-                    ) : (
-                        <span className="text-xs text-muted-foreground">Open editor →</span>
-                    )}
+                    {props.disabled ? <Skeleton className="h-3 w-28"/> :
+                        <span className="text-xs text-muted-foreground">Open editor →</span>}
                 </div>
             </CardContent>
         </Card>
@@ -311,12 +291,12 @@ function getStatusVariant(status: CourseStatus): "default" | "secondary" | "dest
 function formatUpdatedAt(updatedAt?: string): string {
     if (!updatedAt) {
         return "Updated recently";
+    } else {
+        const date = new Date(updatedAt);
+        if (Number.isNaN(date.getTime())) {
+            return "Updated recently";
+        } else {
+            return `Updated on ${date.toLocaleDateString()}`;
+        }
     }
-
-    const date = new Date(updatedAt);
-    if (Number.isNaN(date.getTime())) {
-        return "Updated recently";
-    }
-
-    return `Updated on ${date.toLocaleDateString()}`;
 }

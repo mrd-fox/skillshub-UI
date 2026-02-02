@@ -16,8 +16,9 @@ concurrency:
 
 jobs:
   build:
-    name: Build (Frontend)
+    name: Build Stage (install • lint • build)
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,7 +31,7 @@ jobs:
           node-version: "20"
           cache: "npm"
 
-      - name: Install dependencies
+      - name: Install
         run: npm ci
 
       - name: Lint
@@ -39,26 +40,18 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Upload build artifacts (dist + deps)
+      - name: Upload dist artifact
         uses: actions/upload-artifact@v4
         with:
-          name: frontend-build
+          name: frontend-dist
           if-no-files-found: error
-          path: |
-            dist
-            node_modules
-            package.json
-            package-lock.json
-            vite.config.*
-            tsconfig*.json
-            cypress.config.*
-            public
-            src
+          path: dist
 
   unit:
-    name: Unit/Integration Tests (coverage)
+    name: Unit Tests (coverage)
     runs-on: ubuntu-latest
     needs: build
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -71,11 +64,8 @@ jobs:
           node-version: "20"
           cache: "npm"
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-build
-          path: .
+      - name: Install
+        run: npm ci
 
       - name: Unit/Integration tests (coverage)
         run: npm run test:coverage
@@ -83,7 +73,7 @@ jobs:
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         with:
-          name: coverage
+          name: frontend-coverage
           if-no-files-found: warn
           path: |
             coverage
@@ -93,6 +83,7 @@ jobs:
     name: Cypress E2E (headless)
     runs-on: ubuntu-latest
     needs: build
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -105,11 +96,14 @@ jobs:
           node-version: "20"
           cache: "npm"
 
-      - name: Download build artifacts
+      - name: Install
+        run: npm ci
+
+      - name: Download dist artifact
         uses: actions/download-artifact@v4
         with:
-          name: frontend-build
-          path: .
+          name: frontend-dist
+          path: dist
 
       - name: Cypress E2E (headless)
         uses: cypress-io/github-action@v6
@@ -140,6 +134,7 @@ jobs:
     name: Sonar (Frontend)
     runs-on: ubuntu-latest
     needs: [ unit, cypress ]
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -149,7 +144,7 @@ jobs:
       - name: Download coverage artifact
         uses: actions/download-artifact@v4
         with:
-          name: coverage
+          name: frontend-coverage
           path: .
 
       - name: SonarQube Cloud Scan

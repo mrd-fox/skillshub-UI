@@ -23,7 +23,8 @@ export default function UnauthorizedPage() {
                         <p className="text-muted-foreground">
                             Vous n’avez pas les permissions nécessaires pour consulter cette page.
                         </p>
-                        <Button variant="outline" onClick={() => (window.location.href = "/")}>
+                        {/*<Button variant="outline" onClick={() => (window.location.href = "/")}>*/}
+                        <Button variant="outline" onClick={() => (window.location.assign("/"))}>
                             Retour à l’accueil
                         </Button>
                     </CardContent>

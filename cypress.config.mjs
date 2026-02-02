@@ -19,6 +19,17 @@ export default defineConfig({
         setupNodeEvents(on, config) {
             // Force Cypress TypeScript compiler to use the Cypress tsconfig
             process.env.TS_NODE_PROJECT = "cypress/tsconfig.json";
+
+            // Stabilize Chrome on Linux CI runners (common flakiness fix)
+            on("before:browser:launch", (browser, launchOptions) => {
+                if (browser.family === "chromium" && process.env.CYPRESS_CI === "true") {
+                    launchOptions.args.push("--no-sandbox");
+                    launchOptions.args.push("--disable-dev-shm-usage");
+                    launchOptions.args.push("--disable-gpu");
+                }
+                return launchOptions;
+            });
+
             return config;
         },
     },

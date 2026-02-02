@@ -22,6 +22,18 @@
 // -- This will overwrite an existing command --
 // Cypress.Commands.overwrite('visit', (originalFn, url, options) => { ... })
 
+Cypress.Commands.add("login", (email: string, password: string) => {
+    cy.session([email, password], () => {
+        // TODO: implement your real login flow here.
+        // Example patterns:
+        // - cy.request("POST", "/api/auth/login", { email, password })
+        // - or visit login page and fill form
+        //
+        // For now, fail fast if used without implementation.
+        throw new Error("Cypress command login() is declared but not implemented.");
+    });
+});
+
 declare global {
     namespace Cypress {
         interface Chainable {

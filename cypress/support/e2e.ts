@@ -18,3 +18,7 @@ import './commands';
 
 // Alternatively you can use CommonJS syntax:
 // require('./commands')
+beforeEach(() => {
+    // Example: you can set consistent viewport here if needed
+    // cy.viewport(1280, 720);
+});

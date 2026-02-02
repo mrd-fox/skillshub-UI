@@ -41,7 +41,8 @@ function redirectToLogin(): void {
     }
 
     // baseURL attendu = ".../api"
-    window.location.href = `${baseURL}/auth/login`;
+    // window.location.href = `${baseURL}/auth/login`;
+    window.location.assign(`${baseURL}/auth/login`)
 }
 
 api.interceptors.response.use(

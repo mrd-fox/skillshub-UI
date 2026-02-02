@@ -71,11 +71,13 @@ export function AuthProvider({children}: { children: ReactNode }) {
     }, [internalUser]);
 
     const login = () => {
-        window.location.href = `${API_ROOT}/auth/login`;
+        // window.location.href = `${API_ROOT}/auth/login`;
+        window.location.assign(`${API_ROOT}/auth/login`);
     };
 
     const logout = () => {
-        window.location.href = `${API_ROOT}/auth/logout`;
+        // window.location.href = `${API_ROOT}/auth/logout`;
+        window.location.assign(`${API_ROOT}/auth/logout`);
     };
 
     const resolveDefaultRole = (currentRoles: string[]) => {

@@ -5,7 +5,7 @@ import {useEffect, useState} from "react";
 import {Input} from "@/components/ui/input.tsx";
 
 type Chapter = { id: number; title: string; position: number };
-type Section = { id: number; title: string; chapters: Chapter[] };
+type Section = { id: number; title: string; position: number; chapters: Chapter[] };
 
 export function SectionAccordion({onChange}: { onChange: (sections: Section[]) => void }) {
     const [sections, setSections] = useState<Section[]>([]);
@@ -18,7 +18,7 @@ export function SectionAccordion({onChange}: { onChange: (sections: Section[]) =
     const addSection = () => {
         setSections(prev => [
             ...prev,
-            {id: Date.now(), title: "", chapters: []},
+            {id: Date.now(), title: "", position: prev.length + 1, chapters: []},
         ]);
     };
 

@@ -26,9 +26,13 @@ describe('axios API interceptor', () => {
         originalLocation = window.location;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         delete (window as any).location;
-        window.location = {
+        const mockLocation = {
             href: '',
-        } as Location;
+            assign: vi.fn((url: string) => {
+                mockLocation.href = url;
+            }),
+        };
+        window.location = mockLocation as Location;
 
         // Create a mock axios instance
         mockAxiosInstance = {

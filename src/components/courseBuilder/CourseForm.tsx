@@ -15,6 +15,7 @@ const courseSchema = z.object({
     sections: z.array(
         z.object({
             title: z.string().min(1, "Le titre de section est requis"),
+            position: z.number(),
             chapters: z.array(
                 z.object({
                     title: z.string().min(1, "Le titre du chapitre est requis"),

@@ -32,7 +32,7 @@ describe('axios API interceptor', () => {
                 mockLocation.href = url;
             }),
         };
-        window.location = mockLocation as Location;
+        window.location = mockLocation as unknown as Location;
 
         // Create a mock axios instance
         mockAxiosInstance = {

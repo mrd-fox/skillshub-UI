@@ -1,11 +1,10 @@
-import {useAuth} from "@/context/AuthContext";
 import {motion} from "framer-motion";
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card.tsx";
 import {AlertCircle} from "lucide-react";
 import {Button} from "@/components/ui/button.tsx";
 
 export default function UnauthorizedPage() {
-    const {login} = useAuth();
+
     return (
         <div className="flex items-center justify-center min-h-screen bg-background">
             <motion.div

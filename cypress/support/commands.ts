@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-namespace */
 /// <reference types="cypress" />
 
 // ***********************************************
@@ -26,8 +25,7 @@
 declare global {
     namespace Cypress {
         interface Chainable {
-            // Add custom commands here
-            // login(email: string, password: string): Chainable<void>
+            login(email: string, password: string): Chainable<void>;
         }
     }
 }

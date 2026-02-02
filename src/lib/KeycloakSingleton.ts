@@ -7,7 +7,7 @@ const keycloakSingleton = new Keycloak({
     clientId: import.meta.env.VITE_KEYCLOAK_CLIENT_ID,
 });
 
-//@ts-ignore
+// @ts-expect-error -- Keycloak types conflict in dev singleton usage (intentional)
 keycloakSingleton.__initialized = false;
 
 export default keycloakSingleton;

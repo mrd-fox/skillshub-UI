@@ -8,6 +8,15 @@ import {SectionAccordion} from "@/components/courseBuilder/SectionAccordion";
 import {Loader2} from "lucide-react";
 import {toast} from "sonner";
 
+interface Course {
+    id: string | undefined;
+    title: string;
+    description: string;
+    price: number;
+    sections: unknown[];
+    status: string;
+}
+
 export default function CourseBuilderPage() {
     const {courseId} = useParams();
     const location = useLocation();
@@ -46,8 +55,8 @@ export default function CourseBuilderPage() {
         fetchCourse();
     }, [courseId, initialCourse]);
 
-    const handleChange = (key: string, value: any) => {
-        setCourse((prev) => ({...prev, [key]: value}));
+    const handleChange = <K extends keyof Course>(key: K, value: Course[K]) => {
+        setCourse((prev: Course) => ({...prev, [key]: value}));
     };
 
     const handleSave = async () => {

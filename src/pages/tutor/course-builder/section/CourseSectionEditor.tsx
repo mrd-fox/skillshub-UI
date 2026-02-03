@@ -51,6 +51,13 @@ type Props = {
     refreshCourse: () => Promise<void>;
 };
 
+type ViewerState = "EMPTY" | "UNSAVED" | "READY";
+
+type SelectedContext = {
+    section: SectionLike;
+    chapter: ChapterLike;
+} | null;
+
 function hasProcessingVideo(course: CourseLike): boolean {
     const sections = course.sections ?? [];
 
@@ -65,6 +72,35 @@ function hasProcessingVideo(course: CourseLike): boolean {
     }
 
     return false;
+}
+
+function findSelectedContext(sections: SectionLike[], selectedChapterId: string | null): SelectedContext {
+    if (!selectedChapterId) {
+        return null;
+    }
+
+    for (const section of sections) {
+        for (const chapter of section.chapters) {
+            if (chapter.id === selectedChapterId) {
+                return {section, chapter};
+            }
+        }
+    }
+
+    return null;
+}
+
+function computeViewerState(selected: SelectedContext): ViewerState {
+    if (!selected) {
+        return "EMPTY";
+    }
+
+    const hasIds = Boolean(selected.section.id) && Boolean(selected.chapter.id);
+    if (!hasIds) {
+        return "UNSAVED";
+    }
+
+    return "READY";
 }
 
 export default function CourseSectionsEditor({
@@ -100,19 +136,16 @@ export default function CourseSectionsEditor({
     });
 
     const selected = useMemo(() => {
-        if (!selectedChapterId) {
-            return null;
-        }
-
-        for (const section of sectionsSorted) {
-            for (const chapter of section.chapters) {
-                if (chapter.id === selectedChapterId) {
-                    return {section, chapter};
-                }
-            }
-        }
-        return null;
+        return findSelectedContext(sectionsSorted, selectedChapterId);
     }, [sectionsSorted, selectedChapterId]);
+
+    const viewerState = useMemo(() => {
+        return computeViewerState(selected);
+    }, [selected]);
+
+    const viewerSectionId = selected?.section?.id ?? null;
+    const viewerChapterId = selected?.chapter?.id ?? null;
+    const viewerVideo = selected?.chapter?.video ?? null;
 
     function handleAddSection() {
         setCourse((prev) => {
@@ -124,7 +157,6 @@ export default function CourseSectionsEditor({
                     : Math.max(...existing.map((s) => s.position ?? 0)) + 1;
 
             const newSection: SectionLike = {
-                //NB! works in moderns browsers
                 id: crypto.randomUUID(),
                 title: "Nouvelle section",
                 position: nextPosition,
@@ -136,6 +168,43 @@ export default function CourseSectionsEditor({
                 sections: [...existing, newSection],
             };
         });
+    }
+
+    function handleAddChapter(sectionId: string) {
+        const newChapterId = crypto.randomUUID();
+
+        setCourse((prev) => {
+            const nextSections = (prev.sections ?? []).map((s) => {
+                if (s.id !== sectionId) {
+                    return s;
+                }
+
+                const chapters = s.chapters ?? [];
+                const nextPosition =
+                    chapters.length === 0
+                        ? 1
+                        : Math.max(...chapters.map((c) => c.position ?? 0)) + 1;
+
+                const newChapter: ChapterLike = {
+                    id: newChapterId,
+                    title: "Nouveau chapitre",
+                    position: nextPosition,
+                    video: null,
+                };
+
+                return {
+                    ...s,
+                    chapters: [...chapters, newChapter],
+                };
+            });
+
+            return {
+                ...prev,
+                sections: nextSections,
+            };
+        });
+
+        setSelectedChapterId(newChapterId);
     }
 
     function handleRenameSection(sectionId: string, nextTitle: string) {
@@ -229,6 +298,37 @@ export default function CourseSectionsEditor({
         });
     }
 
+    function renderViewer() {
+        if (viewerState === "EMPTY") {
+            return (
+                <div className="rounded-lg border bg-muted/10 p-4 text-sm text-muted-foreground">
+                    Aucun chapitre sélectionné.
+                </div>
+            );
+        }
+
+        if (viewerState === "UNSAVED") {
+            return (
+                <div className="rounded-lg border bg-muted/10 p-4 text-sm text-muted-foreground">
+                    Ce chapitre n’est pas encore enregistré.
+                    <br/>
+                    Cliquez sur <strong>Save course</strong> pour activer l’upload vidéo.
+                </div>
+            );
+        }
+
+        // READY
+        return (
+            <ChapterVideoPanel
+                courseId={courseId}
+                sectionId={viewerSectionId as string}
+                chapterId={viewerChapterId as string}
+                video={viewerVideo}
+                onRequestRefresh={refreshCourse}
+            />
+        );
+    }
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -247,13 +347,15 @@ export default function CourseSectionsEditor({
                             {sectionsSorted.length} section{sectionsSorted.length > 1 ? "s" : ""}
                         </Badge>
                         <Badge variant="outline" className="rounded-full px-3 py-1 text-xs font-semibold">
-                            {countChapters(sectionsSorted)} chapitre
-                            {countChapters(sectionsSorted) > 1 ? "s" : ""}
+                            {countChapters(sectionsSorted)} chapitre{countChapters(sectionsSorted) > 1 ? "s" : ""}
                         </Badge>
 
                         <Button type="button" variant="outline" size="sm" onClick={() => setIsSidebarOpen((v) => !v)}>
-                            {isSidebarOpen ? <PanelRightClose className="h-4 w-4"/> :
-                                <PanelRightOpen className="h-4 w-4"/>}
+                            {isSidebarOpen ? (
+                                <PanelRightClose className="h-4 w-4"/>
+                            ) : (
+                                <PanelRightOpen className="h-4 w-4"/>
+                            )}
                         </Button>
                     </div>
                 </div>
@@ -274,21 +376,7 @@ export default function CourseSectionsEditor({
                             <CardTitle className="text-base">Viewer</CardTitle>
                         </CardHeader>
 
-                        <CardContent>
-                            {!selected ? (
-                                <div className="rounded-lg border bg-muted/10 p-4 text-sm text-muted-foreground">
-                                    Aucun chapitre sélectionné.
-                                </div>
-                            ) : (
-                                <ChapterVideoPanel
-                                    courseId={courseId}
-                                    sectionId={selected.section.id}
-                                    chapterId={selected.chapter.id}
-                                    video={selected.chapter.video ?? null}
-                                    onRequestRefresh={refreshCourse}
-                                />
-                            )}
-                        </CardContent>
+                        <CardContent>{renderViewer()}</CardContent>
                     </Card>
 
                     {/* RIGHT SIDEBAR */}
@@ -304,6 +392,7 @@ export default function CourseSectionsEditor({
                             onRenameChapter={handleRenameChapter}
                             onDeleteChapter={handleDeleteChapter}
                             onAddSection={handleAddSection}
+                            onAddChapter={handleAddChapter}
                         />
                     ) : null}
                 </div>

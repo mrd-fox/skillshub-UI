@@ -1,10 +1,9 @@
-import React, {useEffect, useRef, useState} from "react";
+import {ReactNode, useEffect, useRef, useState} from "react";
 import {AccordionContent, AccordionItem, AccordionTrigger} from "@/components/ui/accordion.tsx";
 import {MoveButton} from "@/components/MoveButton.tsx";
 import {ArrowDown, ArrowUp, Pencil, Trash2} from "lucide-react";
-import {Button} from "@/components/ui/button.tsx";
 import {Input} from "@/components/ui/input.tsx";
-import {cn} from "@/lib/utils.ts";
+import {Button} from "@/components/ui/button.tsx";
 
 type Props = {
     section: {
@@ -18,11 +17,12 @@ type Props = {
     onMoveUp: () => void;
     onMoveDown: () => void;
 
-    // NEW: UI-only actions (no API here)
     onRenameSection: (sectionId: string, nextTitle: string) => void;
     onDeleteSection: (sectionId: string) => void;
 
-    children: React.ReactNode;
+    onAddChapter: (sectionId: string) => void;
+
+    children: ReactNode;
 };
 
 export default function SectionItem({
@@ -33,105 +33,75 @@ export default function SectionItem({
                                         onMoveDown,
                                         onRenameSection,
                                         onDeleteSection,
+                                        onAddChapter,
                                         children,
                                     }: Readonly<Props>) {
-    const canMoveUp = index > 0;
-    const canMoveDown = index < total - 1;
-
-    const [isEditingTitle, setIsEditingTitle] = useState<boolean>(false);
+    const [isEditing, setIsEditing] = useState<boolean>(false);
     const [draftTitle, setDraftTitle] = useState<string>(section.title ?? "");
     const inputRef = useRef<HTMLInputElement | null>(null);
 
+    const canMoveUp = index > 0;
+    const canMoveDown = index < total - 1;
+
     useEffect(() => {
-        // Sync draft when section changes (reorder, refresh, etc.)
         setDraftTitle(section.title ?? "");
-        setIsEditingTitle(false);
+        setIsEditing(false);
     }, [section.id, section.title]);
 
     useEffect(() => {
-        if (!isEditingTitle) {
-            return;
+        if (isEditing) {
+            requestAnimationFrame(() => {
+                inputRef.current?.focus();
+                inputRef.current?.select();
+            });
         }
-        // Focus the input when entering edit mode
-        const id = window.setTimeout(() => {
-            inputRef.current?.focus();
-            inputRef.current?.select();
-        }, 0);
+    }, [isEditing]);
 
-        return () => {
-            window.clearTimeout(id);
-        };
-    }, [isEditingTitle]);
-
-    function startEdit(e: React.MouseEvent<HTMLButtonElement>) {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsEditingTitle(true);
-    }
-
-    function cancelEdit() {
-        setDraftTitle(section.title ?? "");
-        setIsEditingTitle(false);
-    }
-
-    function commitEdit() {
+    function commitRename() {
         const trimmed = (draftTitle ?? "").trim();
-
-        // Rule: title cannot be empty -> rollback
         if (trimmed.length === 0) {
-            cancelEdit();
+            setDraftTitle(section.title ?? "");
+            setIsEditing(false);
             return;
         }
 
-        // No-op if unchanged
-        if (trimmed === (section.title ?? "").trim()) {
-            setIsEditingTitle(false);
-            return;
+        if (trimmed !== section.title) {
+            onRenameSection(section.id, trimmed);
         }
 
-        onRenameSection(section.id, trimmed);
-        setIsEditingTitle(false);
+        setIsEditing(false);
     }
 
-    function handleDelete(e: React.MouseEvent<HTMLButtonElement>) {
-        e.preventDefault();
-        e.stopPropagation();
-
-        // Deliberately no modal here for now.
-        // If you want confirmation, we will add it at parent level (consistent UX).
-        onDeleteSection(section.id);
+    function cancelRename() {
+        setDraftTitle(section.title ?? "");
+        setIsEditing(false);
     }
 
     return (
-        <AccordionItem value={section.id} className="rounded-xl border bg-card">
-            {/* HEADER */}
-            <div className="flex items-center justify-between gap-3 px-4 py-4">
-                {/* Trigger ONLY (renders a <button>) */}
-                <AccordionTrigger className="flex-1 py-0 no-underline hover:no-underline">
-                    <div className="min-w-0 text-left">
-                        {isEditingTitle ? (
+        <AccordionItem
+            value={section.id}
+            className="w-full max-w-full overflow-hidden rounded-xl border bg-card"
+        >
+            {/* HEADER split in 2 rows to keep actions ALWAYS visible */}
+            <div className="w-full max-w-full px-3 py-3">
+                {/* Row 1: Trigger (button) only contains title + chevron */}
+                <AccordionTrigger className="w-full min-w-0 py-0 no-underline hover:no-underline">
+                    <div className="min-w-0 max-w-full text-left">
+                        {isEditing ? (
                             <Input
                                 ref={inputRef}
                                 value={draftTitle}
                                 onChange={(e) => setDraftTitle(e.target.value)}
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                }}
                                 onKeyDown={(e) => {
                                     if (e.key === "Enter") {
                                         e.preventDefault();
-                                        e.stopPropagation();
-                                        commitEdit();
+                                        commitRename();
                                     } else if (e.key === "Escape") {
                                         e.preventDefault();
-                                        e.stopPropagation();
-                                        cancelEdit();
-                                    } else {
-                                        // no-op
+                                        cancelRename();
                                     }
                                 }}
-                                onBlur={() => commitEdit()}
+                                onBlur={commitRename}
                                 className="h-9"
                                 aria-label="Rename section"
                             />
@@ -148,17 +118,20 @@ export default function SectionItem({
                     </div>
                 </AccordionTrigger>
 
-                {/* ACTIONS — OUTSIDE trigger (avoid nested buttons) */}
-                <div className="flex shrink-0 items-center gap-1">
+                {/* Row 2: Actions at the bottom of the section header */}
+                <div className="mt-2 flex w-full items-center justify-end gap-1">
                     <Button
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className={cn("h-9 w-9 rounded-lg", isEditingTitle ? "opacity-50" : "")}
-                        onClick={startEdit}
-                        disabled={isEditingTitle}
-                        aria-label="Edit section title"
-                        title="Renommer"
+                        className="h-7 w-7"
+                        disabled={isEditing}
+                        aria-label="Rename section"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setIsEditing(true);
+                        }}
                     >
                         <Pencil className="h-4 w-4"/>
                     </Button>
@@ -167,17 +140,20 @@ export default function SectionItem({
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-9 w-9 rounded-lg text-destructive hover:text-destructive"
-                        onClick={handleDelete}
+                        className="h-7 w-7 text-destructive hover:text-destructive"
                         aria-label="Delete section"
-                        title="Supprimer"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onDeleteSection(section.id);
+                        }}
                     >
                         <Trash2 className="h-4 w-4"/>
                     </Button>
 
                     <MoveButton
                         label="Monter la section"
-                        disabled={!canMoveUp || isEditingTitle}
+                        disabled={!canMoveUp || isEditing}
                         onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -185,9 +161,10 @@ export default function SectionItem({
                         }}
                         icon={<ArrowUp className="h-4 w-4"/>}
                     />
+
                     <MoveButton
                         label="Descendre la section"
-                        disabled={!canMoveDown || isEditingTitle}
+                        disabled={!canMoveDown || isEditing}
                         onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -198,8 +175,16 @@ export default function SectionItem({
                 </div>
             </div>
 
-            <AccordionContent className="px-4 pb-5">
+            <AccordionContent className="space-y-3 px-3 pb-4">
                 {children}
+
+                <button
+                    type="button"
+                    className="w-full rounded-md border border-dashed px-3 py-2 text-sm font-medium text-muted-foreground transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    onClick={() => onAddChapter(section.id)}
+                >
+                    + Ajouter un chapitre
+                </button>
             </AccordionContent>
         </AccordionItem>
     );

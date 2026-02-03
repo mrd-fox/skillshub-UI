@@ -10,6 +10,7 @@ import {Input} from "@/components/ui/input";
 import {Progress} from "@/components/ui/progress";
 import {Separator} from "@/components/ui/separator";
 import {cn} from "@/lib/utils";
+import VimeoPlayer from "@/components/video/VimeoPlayer.tsx";
 
 type VideoStatus = "PENDING" | "PROCESSING" | "READY" | "FAILED" | "EXPIRED" | "UNKNOWN";
 
@@ -17,13 +18,13 @@ type ChapterVideo = {
     videoId?: string | null;
     status?: VideoStatus | null;
 
-    // Internal canonical uri persisted in DB. Example: "vimeo://1161124790"
+    // Canonical internal uri persisted in DB. Example: "vimeo://1161124790"
     sourceUri?: string | null;
 
-    // Optional metadata (depending on backend response)
     vimeoId?: string | number | null;
     embedHash?: string | null;
 
+    thumbnailUrl?: string | null;
     errorMessage?: string | null;
 };
 
@@ -32,10 +33,8 @@ type Props = {
     sectionId: string;
     chapterId: string;
 
-    // Video is part of the chapter payload (backend is source of truth)
     video?: ChapterVideo | null;
 
-    // Parent refetches the course (single source of truth)
     onRequestRefresh: () => void;
 
     className?: string;
@@ -46,11 +45,30 @@ function buildVideoBasePath(courseId: string, sectionId: string, chapterId: stri
     return `/course/${courseId}/sections/${sectionId}/chapters/${chapterId}/video`;
 }
 
-function formatStatus(status?: VideoStatus | null): string {
+function formatStatus(status?: VideoStatus | null): VideoStatus {
     if (!status) {
         return "UNKNOWN";
     }
     return status;
+}
+
+function buildSourceUri(video?: ChapterVideo | null): string | null {
+    if (!video) {
+        return null;
+    }
+
+    if (typeof video.sourceUri === "string" && video.sourceUri.trim().length > 0) {
+        return video.sourceUri.trim();
+    }
+
+    if (video.vimeoId !== null && video.vimeoId !== undefined) {
+        const id = String(video.vimeoId).trim();
+        if (id.length > 0) {
+            return `vimeo://${id}`;
+        }
+    }
+
+    return null;
 }
 
 export default function ChapterVideoPanel(props: Props) {
@@ -60,14 +78,18 @@ export default function ChapterVideoPanel(props: Props) {
     const tusUploadRef = useRef<tus.Upload | null>(null);
 
     const [file, setFile] = useState<File | null>(null);
-    const [uploadUrl, setUploadUrl] = useState<string | null>(null);
     const [progressPct, setProgressPct] = useState<number>(0);
     const [message, setMessage] = useState<string>("En attente.");
 
-    const [initLoading, setInitLoading] = useState<boolean>(false);
     const [uploadLoading, setUploadLoading] = useState<boolean>(false);
-    const [confirmLoading, setConfirmLoading] = useState<boolean>(false);
     const [deleteLoading, setDeleteLoading] = useState<boolean>(false);
+
+    // Lazy player: instantiate only when user clicks
+    const [previewEnabled, setPreviewEnabled] = useState<boolean>(false);
+
+    const status = useMemo(() => {
+        return formatStatus(video?.status ?? "UNKNOWN");
+    }, [video?.status]);
 
     const hasVideo = useMemo(() => {
         if (!video) {
@@ -79,53 +101,46 @@ export default function ChapterVideoPanel(props: Props) {
         return true;
     }, [video]);
 
-    const computedStatus = useMemo(() => {
-        return formatStatus(video?.status ?? "UNKNOWN");
-    }, [video?.status]);
+    const sourceUri = useMemo(() => {
+        return buildSourceUri(video);
+    }, [video]);
+
+    const isReady = useMemo(() => {
+        return status === "READY";
+    }, [status]);
+
+    const isProcessingOrPending = useMemo(() => {
+        if (status === "PENDING") {
+            return true;
+        } else if (status === "PROCESSING") {
+            return true;
+        } else {
+            return false;
+        }
+    }, [status]);
 
     const isBusy = useMemo(() => {
-        if (initLoading || uploadLoading || confirmLoading || deleteLoading) {
+        if (uploadLoading || deleteLoading) {
             return true;
-        }
-        return false;
-    }, [initLoading, uploadLoading, confirmLoading, deleteLoading]);
-
-    const canInit = useMemo(() => {
-        if (!file) {
+        } else {
             return false;
         }
-        if (isBusy) {
-            return false;
-        }
-        return true;
-    }, [file, isBusy]);
+    }, [uploadLoading, deleteLoading]);
 
     const canUpload = useMemo(() => {
         if (!file) {
             return false;
         }
-        if (!uploadUrl) {
-            return false;
-        }
         if (isBusy) {
             return false;
         }
-        return true;
-    }, [file, uploadUrl, isBusy]);
-
-    const canConfirm = useMemo(() => {
-        // Backend is source of truth; confirm endpoint does not require sourceUri from UI.
-        // We only allow confirm if a video exists in backend state.
-        if (!hasVideo) {
-            return false;
-        }
-        if (isBusy) {
+        if (isProcessingOrPending) {
             return false;
         }
         return true;
-    }, [hasVideo, isBusy]);
+    }, [file, isBusy, isProcessingOrPending]);
 
-    const canDeleteVideo = useMemo(() => {
+    const canDelete = useMemo(() => {
         if (!hasVideo) {
             return false;
         }
@@ -136,11 +151,11 @@ export default function ChapterVideoPanel(props: Props) {
     }, [hasVideo, isBusy]);
 
     useEffect(() => {
-        // Reset local upload UI when chapter changes
+        // Reset local state when chapter changes
         setFile(null);
-        setUploadUrl(null);
         setProgressPct(0);
         setMessage("En attente.");
+        setPreviewEnabled(false);
 
         if (fileInputRef.current) {
             fileInputRef.current.value = "";
@@ -169,145 +184,8 @@ export default function ChapterVideoPanel(props: Props) {
         setMessage("Fichier sélectionné.");
     }
 
-    async function handleInit() {
-        if (!canInit) {
-            return;
-        }
-        if (!file) {
-            return;
-        }
-
-        setInitLoading(true);
-        setMessage("Init...");
-
-        try {
-            const res = (await initVideo({
-                courseId,
-                sectionId,
-                chapterId,
-                sizeBytes: file.size,
-            })) as InitVideoResponse;
-
-            if (!res || !("uploadUrl" in res) || !res.uploadUrl) {
-                throw new Error("InitVideoResponse: missing uploadUrl.");
-            }
-
-            setUploadUrl(res.uploadUrl);
-
-            // Critical: refresh after INIT so UI reloads backend state (videoId/sourceUri/status).
-            onRequestRefresh();
-
-            setMessage("Init OK. Prêt pour upload.");
-        } catch (err) {
-            const msg = err instanceof Error ? err.message : "Init failed.";
-            setMessage(msg);
-        } finally {
-            setInitLoading(false);
-        }
-    }
-
-    async function handleUpload() {
-        if (!canUpload) {
-            return;
-        }
-        if (!file || !uploadUrl) {
-            return;
-        }
-
-        setUploadLoading(true);
-        setMessage("Upload en cours...");
-
-        try {
-            const upload = new tus.Upload(file, {
-                uploadUrl,
-                retryDelays: [0, 1000, 3000, 5000],
-                metadata: {
-                    filename: file.name,
-                    filetype: file.type,
-                },
-                onProgress: (bytesUploaded: number, bytesTotal: number) => {
-                    if (bytesTotal <= 0) {
-                        setProgressPct(0);
-                        return;
-                    }
-                    const pct = Math.floor((bytesUploaded / bytesTotal) * 100);
-                    setProgressPct(pct);
-                },
-                onError: (error: Error) => {
-                    setMessage(error?.message ?? "Upload failed.");
-                    setUploadLoading(false);
-                },
-                onSuccess: () => {
-                    setMessage("Upload OK. Tu peux confirmer.");
-                    setUploadLoading(false);
-
-                    // Refresh is useful (backend may update status/fields after upload).
-                    onRequestRefresh();
-                },
-            });
-
-            tusUploadRef.current = upload;
-            upload.start();
-        } catch (err) {
-            const msg = err instanceof Error ? err.message : "Upload failed.";
-            setMessage(msg);
-            setUploadLoading(false);
-        }
-    }
-
-    async function handleConfirm() {
-        if (!canConfirm) {
-            return;
-        }
-
-        setConfirmLoading(true);
-        setMessage("Confirm...");
-
-        try {
-            await confirmVideo({
-                courseId,
-                sectionId,
-                chapterId,
-            });
-
-            setMessage("Confirm OK. Polling backend démarré.");
-            onRequestRefresh();
-        } catch (err) {
-            const msg = err instanceof Error ? err.message : "Confirm failed.";
-            setMessage(msg);
-        } finally {
-            setConfirmLoading(false);
-        }
-    }
-
-    async function handleDeleteVideo() {
-        if (!canDeleteVideo) {
-            return;
-        }
-
-        setDeleteLoading(true);
-        setMessage("Suppression vidéo...");
-
-        try {
-            const basePath = buildVideoBasePath(courseId, sectionId, chapterId);
-
-            // NOTE: videoApi.ts does not contain delete yet, so we call the api instance directly here.
-            // If you add deleteVideo() in videoApi later, replace this with a proper import.
-            await api.delete(`${basePath}`);
-
-            setMessage("Vidéo supprimée.");
-            onRequestRefresh();
-        } catch (err) {
-            const msg = err instanceof Error ? err.message : "Delete video failed.";
-            setMessage(msg);
-        } finally {
-            setDeleteLoading(false);
-        }
-    }
-
     function handleResetLocal() {
         setProgressPct(0);
-        setUploadUrl(null);
         setMessage("En attente.");
         setFile(null);
 
@@ -326,30 +204,223 @@ export default function ChapterVideoPanel(props: Props) {
         }
     }
 
+    async function handleUploadAll() {
+        if (!canUpload) {
+            return;
+        }
+        if (!file) {
+            return;
+        }
+
+        setUploadLoading(true);
+        setMessage("Init + upload...");
+
+        try {
+            // 1) INIT
+            const initRes = (await initVideo({
+                courseId,
+                sectionId,
+                chapterId,
+                sizeBytes: file.size,
+            })) as InitVideoResponse;
+
+            if (!initRes || !initRes.uploadUrl) {
+                throw new Error("InitVideoResponse: missing uploadUrl.");
+            }
+
+            onRequestRefresh();
+
+            // 2) UPLOAD (TUS)
+            await new Promise<void>((resolve, reject) => {
+                const upload = new tus.Upload(file, {
+                    uploadUrl: initRes.uploadUrl,
+                    retryDelays: [0, 1000, 3000, 5000],
+                    metadata: {
+                        filename: file.name,
+                        filetype: file.type,
+                    },
+                    onProgress: (bytesUploaded: number, bytesTotal: number) => {
+                        if (bytesTotal <= 0) {
+                            setProgressPct(0);
+                            return;
+                        }
+                        const pct = Math.floor((bytesUploaded / bytesTotal) * 100);
+                        setProgressPct(pct);
+                    },
+                    onError: (error: Error) => {
+                        reject(error);
+                    },
+                    onSuccess: () => {
+                        resolve();
+                    },
+                });
+
+                tusUploadRef.current = upload;
+                upload.start();
+            });
+
+            setMessage("Upload OK. Confirm...");
+
+            // 3) CONFIRM
+            await confirmVideo({
+                courseId,
+                sectionId,
+                chapterId,
+            });
+
+            setMessage("Confirm OK. Traitement en cours côté backend.");
+            onRequestRefresh();
+
+            setFile(null);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = "";
+            }
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : "Upload failed.";
+            setMessage(msg);
+        } finally {
+            setUploadLoading(false);
+        }
+    }
+
+    async function handleDeleteVideo() {
+        if (!canDelete) {
+            return;
+        }
+
+        setDeleteLoading(true);
+        setMessage("Suppression vidéo...");
+
+        try {
+            const basePath = buildVideoBasePath(courseId, sectionId, chapterId);
+            await api.delete(`${basePath}`);
+
+            setMessage("Vidéo supprimée.");
+            setPreviewEnabled(false);
+            onRequestRefresh();
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : "Delete video failed.";
+            setMessage(msg);
+        } finally {
+            setDeleteLoading(false);
+        }
+    }
+
     return (
         <div className={cn("rounded-lg border bg-card p-4", className)}>
-            <div className="flex items-start justify-between gap-4">
-                <div>
-                    <h3 className="text-sm font-semibold">Upload</h3>
-                    <p className="text-xs text-muted-foreground">
-                        Flow: init → upload (TUS) → confirm → polling backend.
-                    </p>
+            {/* VIEWER */}
+            <div className="space-y-3">
+                <div className="flex items-start justify-between gap-4">
+                    <div>
+                        <h3 className="text-sm font-semibold">Viewer</h3>
+                        <p className="text-xs text-muted-foreground">
+                            Statut vidéo : <span className="font-medium text-foreground">{status}</span>
+                        </p>
+                    </div>
+
+                    {isReady ? (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPreviewEnabled(true)}
+                            disabled={previewEnabled}
+                            title="Load and display the Vimeo player"
+                        >
+                            Voir la vidéo
+                        </Button>
+                    ) : null}
                 </div>
 
-                <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleDeleteVideo}
-                    disabled={!canDeleteVideo}
-                    title="Delete the video attached to this chapter"
-                >
-                    Delete video
-                </Button>
+                {/* Fixed-size frame: same dimensions for thumbnail/black/player */}
+                <div className="w-full">
+                    <div className="w-full overflow-hidden rounded-lg border bg-black">
+                        <div className="aspect-video w-full">
+                            {/* Content must always fill the fixed frame */}
+                            {isReady ? (
+                                <>
+                                    {!previewEnabled ? (
+                                        <>
+                                            {video?.thumbnailUrl ? (
+                                                <img
+                                                    src={video.thumbnailUrl}
+                                                    alt="Video thumbnail"
+                                                    className="h-full w-full object-cover"
+                                                />
+                                            ) : (
+                                                <div
+                                                    className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
+                                                    Preview disponible. Clique sur <span
+                                                    className="ml-1 font-medium text-foreground">Voir la vidéo</span>.
+                                                </div>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <>
+                                            {sourceUri ? (
+                                                <div className="h-full w-full">
+                                                    <VimeoPlayer
+                                                        sourceUri={sourceUri}
+                                                        embedHash={video?.embedHash ?? null}
+                                                        thumbnailUrl={video?.thumbnailUrl ?? null}
+                                                        minimalUi={true}
+                                                        autoplay={false}
+                                                        onError={(msg) => {
+                                                            setMessage(msg);
+                                                        }}
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <div
+                                                    className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
+                                                    Vidéo READY mais sourceUri introuvable.
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                </>
+                            ) : (
+                                <div
+                                    className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
+                                    {status === "PROCESSING" || status === "PENDING"
+                                        ? "Traitement en cours. L’upload est verrouillé."
+                                        : "Aucune vidéo prête. Upload requis."}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {!previewEnabled && isReady ? (
+                    <div className="text-xs text-muted-foreground">
+                        Preview disponible. Clique sur <span
+                        className="font-medium text-foreground">Voir la vidéo</span>.
+                    </div>
+                ) : null}
             </div>
 
             <Separator className="my-4"/>
 
+            {/* UPLOAD */}
             <div className="space-y-3">
+                <div className="flex items-start justify-between gap-4">
+                    <div>
+                        <h3 className="text-sm font-semibold">Upload</h3>
+                        <p className="text-xs text-muted-foreground">
+                            Upload = init + TUS + confirm automatique. Pas de bouton confirm.
+                        </p>
+                    </div>
+
+                    <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={handleDeleteVideo}
+                        disabled={!canDelete}
+                    >
+                        Delete
+                    </Button>
+                </div>
+
                 <div className="space-y-2">
                     <div className="text-xs font-medium">Fichier vidéo</div>
                     <Input
@@ -357,21 +428,18 @@ export default function ChapterVideoPanel(props: Props) {
                         type="file"
                         accept="video/*"
                         onChange={onPickFile}
-                        disabled={isBusy}
+                        disabled={isBusy || isProcessingOrPending}
                     />
+                    {isProcessingOrPending ? (
+                        <div className="text-xs text-muted-foreground">
+                            Upload bloqué : une vidéo est déjà en cours de traitement (PENDING/PROCESSING).
+                        </div>
+                    ) : null}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                    <Button onClick={handleInit} disabled={!canInit}>
-                        {initLoading ? "Init..." : "Init"}
-                    </Button>
-
-                    <Button onClick={handleUpload} disabled={!canUpload}>
-                        {uploadLoading ? "Uploading..." : "Upload (TUS)"}
-                    </Button>
-
-                    <Button onClick={handleConfirm} disabled={!canConfirm}>
-                        {confirmLoading ? "Confirm..." : "Confirm"}
+                    <Button onClick={handleUploadAll} disabled={!canUpload}>
+                        {uploadLoading ? "Uploading..." : "Upload"}
                     </Button>
 
                     <Button variant="outline" onClick={handleResetLocal} disabled={isBusy}>
@@ -388,40 +456,6 @@ export default function ChapterVideoPanel(props: Props) {
                 </div>
 
                 <div className="text-sm text-muted-foreground">{message}</div>
-
-                <Separator className="my-2"/>
-
-                <div className="space-y-1 text-xs text-muted-foreground">
-                    <div>
-                        <span className="font-medium text-foreground">VideoId:</span>{" "}
-                        {video?.videoId ?? "-"}
-                    </div>
-                    <div>
-                        <span className="font-medium text-foreground">SourceUri:</span>{" "}
-                        {video?.sourceUri ?? "-"}
-                    </div>
-                    <div>
-                        <span className="font-medium text-foreground">VimeoId:</span>{" "}
-                        {video?.vimeoId ?? "-"}
-                    </div>
-                    <div>
-                        <span className="font-medium text-foreground">EmbedHash:</span>{" "}
-                        {video?.embedHash ?? "-"}
-                    </div>
-                    <div>
-                        <span className="font-medium text-foreground">Backend status:</span>{" "}
-                        {computedStatus}
-                    </div>
-                    {video?.errorMessage ? (
-                        <div className="text-destructive">
-                            <span className="font-medium">Error:</span> {video.errorMessage}
-                        </div>
-                    ) : null}
-                </div>
-
-                <div className="pt-2 text-xs text-muted-foreground">
-                    Publish is course-level only. No publish action exists here.
-                </div>
             </div>
         </div>
     );

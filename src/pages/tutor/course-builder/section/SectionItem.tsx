@@ -4,6 +4,7 @@ import {MoveButton} from "@/components/MoveButton.tsx";
 import {ArrowDown, ArrowUp, Pencil, Trash2} from "lucide-react";
 import {Input} from "@/components/ui/input.tsx";
 import {Button} from "@/components/ui/button.tsx";
+import {cn} from "@/lib/utils.ts";
 
 type Props = {
     section: {
@@ -80,46 +81,16 @@ export default function SectionItem({
     return (
         <AccordionItem
             value={section.id}
-            className="w-full max-w-full overflow-hidden rounded-xl border bg-card"
+            className={cn(
+                "w-full max-w-full overflow-hidden rounded-xl border",
+                // Section container slightly darker so chapters are easier to distinguish
+                "bg-muted/25"
+            )}
         >
-            {/* HEADER split in 2 rows to keep actions ALWAYS visible */}
+            {/* HEADER: tools ABOVE title + chevron */}
             <div className="w-full max-w-full px-3 py-3">
-                {/* Row 1: Trigger (button) only contains title + chevron */}
-                <AccordionTrigger className="w-full min-w-0 py-0 no-underline hover:no-underline">
-                    <div className="min-w-0 max-w-full text-left">
-                        {isEditing ? (
-                            <Input
-                                ref={inputRef}
-                                value={draftTitle}
-                                onChange={(e) => setDraftTitle(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                        e.preventDefault();
-                                        commitRename();
-                                    } else if (e.key === "Escape") {
-                                        e.preventDefault();
-                                        cancelRename();
-                                    }
-                                }}
-                                onBlur={commitRename}
-                                className="h-9"
-                                aria-label="Rename section"
-                            />
-                        ) : (
-                            <>
-                                <div className="truncate font-semibold">
-                                    {index + 1}. {section.title || "Section sans titre"}
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                    {section.chapters.length} chapitre{section.chapters.length > 1 ? "s" : ""}
-                                </div>
-                            </>
-                        )}
-                    </div>
-                </AccordionTrigger>
-
-                {/* Row 2: Actions at the bottom of the section header */}
-                <div className="mt-2 flex w-full items-center justify-end gap-1">
+                {/* Row 1: Tools (top, aligned right) */}
+                <div className="flex w-full items-center justify-end gap-1 pb-2">
                     <Button
                         type="button"
                         variant="ghost"
@@ -173,18 +144,55 @@ export default function SectionItem({
                         icon={<ArrowDown className="h-4 w-4"/>}
                     />
                 </div>
+
+                {/* Row 2: Title + dropdown chevron (trigger button only) */}
+                <AccordionTrigger className="w-full min-w-0 py-0 no-underline hover:no-underline">
+                    <div className="min-w-0 max-w-full text-left">
+                        {isEditing ? (
+                            <Input
+                                ref={inputRef}
+                                value={draftTitle}
+                                onChange={(e) => setDraftTitle(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        commitRename();
+                                    } else if (e.key === "Escape") {
+                                        e.preventDefault();
+                                        cancelRename();
+                                    }
+                                }}
+                                onBlur={commitRename}
+                                className="h-9 bg-background"
+                                aria-label="Rename section"
+                            />
+                        ) : (
+                            <>
+                                <div className="truncate font-semibold">
+                                    {index + 1}. {section.title || "Section sans titre"}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                    {section.chapters.length} chapitre{section.chapters.length > 1 ? "s" : ""}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </AccordionTrigger>
             </div>
 
-            <AccordionContent className="space-y-3 px-3 pb-4">
-                {children}
+            {/* CONTENT: keep chapters visually "clean" to distinguish from section container */}
+            <AccordionContent className="px-3 pb-4">
+                <div className="space-y-3 rounded-lg border bg-background p-3">
+                    {children}
 
-                <button
-                    type="button"
-                    className="w-full rounded-md border border-dashed px-3 py-2 text-sm font-medium text-muted-foreground transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
-                    onClick={() => onAddChapter(section.id)}
-                >
-                    + Ajouter un chapitre
-                </button>
+                    <button
+                        type="button"
+                        className="w-full rounded-md border border-dashed px-3 py-2 text-sm font-medium text-muted-foreground transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
+                        onClick={() => onAddChapter(section.id)}
+                    >
+                        + Ajouter un chapitre
+                    </button>
+                </div>
             </AccordionContent>
         </AccordionItem>
     );

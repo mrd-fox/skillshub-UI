@@ -15,6 +15,8 @@ type Props = {
     index: number;
     total: number;
 
+    readOnly: boolean;
+
     onMoveUp: () => void;
     onMoveDown: () => void;
 
@@ -30,6 +32,7 @@ export default function SectionItem({
                                         section,
                                         index,
                                         total,
+                                        readOnly,
                                         onMoveUp,
                                         onMoveDown,
                                         onRenameSection,
@@ -50,6 +53,12 @@ export default function SectionItem({
     }, [section.id, section.title]);
 
     useEffect(() => {
+        if (readOnly) {
+            setIsEditing(false);
+        }
+    }, [readOnly]);
+
+    useEffect(() => {
         if (isEditing) {
             requestAnimationFrame(() => {
                 inputRef.current?.focus();
@@ -59,6 +68,12 @@ export default function SectionItem({
     }, [isEditing]);
 
     function commitRename() {
+        if (readOnly) {
+            setDraftTitle(section.title ?? "");
+            setIsEditing(false);
+            return;
+        }
+
         const trimmed = (draftTitle ?? "").trim();
         if (trimmed.length === 0) {
             setDraftTitle(section.title ?? "");
@@ -78,6 +93,8 @@ export default function SectionItem({
         setIsEditing(false);
     }
 
+    const disableActions = readOnly || isEditing;
+
     return (
         <AccordionItem
             value={section.id}
@@ -96,12 +113,15 @@ export default function SectionItem({
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7"
-                        disabled={isEditing}
+                        disabled={disableActions}
                         aria-label="Rename section"
                         onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            setIsEditing(true);
+
+                            if (!readOnly) {
+                                setIsEditing(true);
+                            }
                         }}
                     >
                         <Pencil className="h-4 w-4"/>
@@ -112,11 +132,15 @@ export default function SectionItem({
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7 text-destructive hover:text-destructive"
+                        disabled={readOnly}
                         aria-label="Delete section"
                         onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            onDeleteSection(section.id);
+
+                            if (!readOnly) {
+                                onDeleteSection(section.id);
+                            }
                         }}
                     >
                         <Trash2 className="h-4 w-4"/>
@@ -124,22 +148,28 @@ export default function SectionItem({
 
                     <MoveButton
                         label="Monter la section"
-                        disabled={!canMoveUp || isEditing}
+                        disabled={readOnly || !canMoveUp || isEditing}
                         onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            onMoveUp();
+
+                            if (!readOnly) {
+                                onMoveUp();
+                            }
                         }}
                         icon={<ArrowUp className="h-4 w-4"/>}
                     />
 
                     <MoveButton
                         label="Descendre la section"
-                        disabled={!canMoveDown || isEditing}
+                        disabled={readOnly || !canMoveDown || isEditing}
                         onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            onMoveDown();
+
+                            if (!readOnly) {
+                                onMoveDown();
+                            }
                         }}
                         icon={<ArrowDown className="h-4 w-4"/>}
                     />
@@ -165,6 +195,7 @@ export default function SectionItem({
                                 onBlur={commitRename}
                                 className="h-9 bg-background"
                                 aria-label="Rename section"
+                                disabled={readOnly}
                             />
                         ) : (
                             <>
@@ -185,13 +216,19 @@ export default function SectionItem({
                 <div className="space-y-3 rounded-lg border bg-background p-3">
                     {children}
 
-                    <button
+                    <Button
                         type="button"
-                        className="w-full rounded-md border border-dashed px-3 py-2 text-sm font-medium text-muted-foreground transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
-                        onClick={() => onAddChapter(section.id)}
+                        variant="outline"
+                        className="w-full border-dashed text-muted-foreground hover:text-primary"
+                        disabled={readOnly}
+                        onClick={() => {
+                            if (!readOnly) {
+                                onAddChapter(section.id);
+                            }
+                        }}
                     >
                         + Ajouter un chapitre
-                    </button>
+                    </Button>
                 </div>
             </AccordionContent>
         </AccordionItem>

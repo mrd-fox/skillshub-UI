@@ -1,4 +1,5 @@
 import {Accordion} from "@/components/ui/accordion.tsx";
+import {Button} from "@/components/ui/button.tsx";
 import {Card, CardContent, CardHeader} from "@/components/ui/card.tsx";
 
 import SectionItem from "./SectionItem";
@@ -22,6 +23,8 @@ type Props = {
     sections: SectionLike[];
     selectedChapterId: string | null;
 
+    readOnly: boolean;
+
     onSelectChapter: (chapterId: string) => void;
 
     onMoveSection: (sectionIndex: number, direction: "UP" | "DOWN") => void;
@@ -43,6 +46,7 @@ type Props = {
 export default function CourseStructureSidebar({
                                                    sections,
                                                    selectedChapterId,
+                                                   readOnly,
                                                    onSelectChapter,
                                                    onMoveSection,
                                                    onMoveChapter,
@@ -66,9 +70,10 @@ export default function CourseStructureSidebar({
                         {sections.map((section, sectionIndex) => (
                             <SectionItem
                                 key={section.id}
-                                section={section as any}
+                                section={section}
                                 index={sectionIndex}
                                 total={sections.length}
+                                readOnly={readOnly}
                                 onMoveUp={() => onMoveSection(sectionIndex, "UP")}
                                 onMoveDown={() => onMoveSection(sectionIndex, "DOWN")}
                                 onRenameSection={onRenameSection}
@@ -88,6 +93,7 @@ export default function CourseStructureSidebar({
                                                 index={chapterIndex}
                                                 total={section.chapters.length}
                                                 isSelected={selectedChapterId === chapter.id}
+                                                readOnly={readOnly}
                                                 onSelect={onSelectChapter}
                                                 onMoveUp={() => onMoveChapter(sectionIndex, chapterIndex, "UP")}
                                                 onMoveDown={() => onMoveChapter(sectionIndex, chapterIndex, "DOWN")}
@@ -104,13 +110,19 @@ export default function CourseStructureSidebar({
 
                 {/* Sticky footer actions (always visible) */}
                 <div className="border-t bg-background px-6 py-3">
-                    <button
+                    <Button
                         type="button"
-                        className="w-full rounded-md border border-dashed px-3 py-2 text-sm font-medium text-muted-foreground transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
-                        onClick={onAddSection}
+                        variant="outline"
+                        className="w-full border-dashed text-muted-foreground hover:text-primary"
+                        disabled={readOnly}
+                        onClick={() => {
+                            if (!readOnly) {
+                                onAddSection();
+                            }
+                        }}
                     >
                         + Ajouter une section
-                    </button>
+                    </Button>
                 </div>
             </CardContent>
         </Card>

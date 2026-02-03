@@ -26,14 +26,14 @@ import {useSectionsOrder} from "@/pages/tutor/course-builder/section/useSections
 import CourseStructureSidebar from "./CourseStructureSidebar";
 
 export type ChapterLike = {
-    id: string;
+    id: string; // backend id OR clientKey ("client:<uuid>")
     title: string;
     position?: number | null;
     video?: any | null;
 };
 
 export type SectionLike = {
-    id: string;
+    id: string; // backend id OR clientKey ("client:<uuid>")
     title: string;
     position?: number | null;
     chapters: ChapterLike[];
@@ -57,6 +57,19 @@ type SelectedContext = {
     section: SectionLike;
     chapter: ChapterLike;
 } | null;
+
+function isClientKey(id: string | null | undefined): boolean {
+    const value = (id ?? "").trim();
+    return value.startsWith("client:");
+}
+
+function createClientKey(): string {
+    return `client:${crypto.randomUUID()}`;
+}
+
+function countChapters(sections: SectionLike[]): number {
+    return sections.reduce((acc, s) => acc + (s.chapters?.length ?? 0), 0);
+}
 
 function hasProcessingVideo(course: CourseLike): boolean {
     const sections = course.sections ?? [];
@@ -95,11 +108,12 @@ function computeViewerState(selected: SelectedContext): ViewerState {
         return "EMPTY";
     }
 
-    const hasIds = Boolean(selected.section.id) && Boolean(selected.chapter.id);
-    if (!hasIds) {
+    // New items are created with id="client:<uuid>" and are NOT persisted yet.
+    if (isClientKey(selected.section.id) || isClientKey(selected.chapter.id)) {
         return "UNSAVED";
     }
 
+    // Persisted ids => upload allowed
     return "READY";
 }
 
@@ -109,8 +123,12 @@ export default function CourseSectionsEditor({
                                                  setCourse,
                                                  refreshCourse,
                                              }: Readonly<Props>) {
-    const {selectedChapterId, setSelectedChapterId} = useCourseBuilder();
+    const {selectedChapterId, setSelectedChapterId, course: builderCourse} = useCourseBuilder();
     const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+
+    const isReadOnly = useMemo(() => {
+        return builderCourse?.status === "WAITING_VALIDATION";
+    }, [builderCourse?.status]);
 
     // Enable polling ONLY when at least one video is PROCESSING.
     const shouldPoll = useMemo(() => hasProcessingVideo(course), [course]);
@@ -148,16 +166,18 @@ export default function CourseSectionsEditor({
     const viewerVideo = selected?.chapter?.video ?? null;
 
     function handleAddSection() {
+        if (isReadOnly) {
+            return;
+        }
+
         setCourse((prev) => {
             const existing = prev.sections ?? [];
 
             const nextPosition =
-                existing.length === 0
-                    ? 1
-                    : Math.max(...existing.map((s) => s.position ?? 0)) + 1;
+                existing.length === 0 ? 1 : Math.max(...existing.map((s) => s.position ?? 0)) + 1;
 
             const newSection: SectionLike = {
-                id: crypto.randomUUID(),
+                id: createClientKey(),
                 title: "Nouvelle section",
                 position: nextPosition,
                 chapters: [],
@@ -171,7 +191,11 @@ export default function CourseSectionsEditor({
     }
 
     function handleAddChapter(sectionId: string) {
-        const newChapterId = crypto.randomUUID();
+        if (isReadOnly) {
+            return;
+        }
+
+        const newChapterId = createClientKey();
 
         setCourse((prev) => {
             const nextSections = (prev.sections ?? []).map((s) => {
@@ -181,9 +205,7 @@ export default function CourseSectionsEditor({
 
                 const chapters = s.chapters ?? [];
                 const nextPosition =
-                    chapters.length === 0
-                        ? 1
-                        : Math.max(...chapters.map((c) => c.position ?? 0)) + 1;
+                    chapters.length === 0 ? 1 : Math.max(...chapters.map((c) => c.position ?? 0)) + 1;
 
                 const newChapter: ChapterLike = {
                     id: newChapterId,
@@ -208,6 +230,10 @@ export default function CourseSectionsEditor({
     }
 
     function handleRenameSection(sectionId: string, nextTitle: string) {
+        if (isReadOnly) {
+            return;
+        }
+
         const normalized = (nextTitle ?? "").trim();
         if (normalized.length === 0) {
             return;
@@ -232,6 +258,10 @@ export default function CourseSectionsEditor({
     }
 
     function handleDeleteSection(sectionId: string) {
+        if (isReadOnly) {
+            return;
+        }
+
         const deleted = (course.sections ?? []).find((s) => s.id === sectionId);
         const shouldResetSelection =
             Boolean(deleted) &&
@@ -254,6 +284,10 @@ export default function CourseSectionsEditor({
     }
 
     function handleRenameChapter(chapterId: string, nextTitle: string) {
+        if (isReadOnly) {
+            return;
+        }
+
         const normalized = (nextTitle ?? "").trim();
         if (normalized.length === 0) {
             return;
@@ -281,6 +315,10 @@ export default function CourseSectionsEditor({
     }
 
     function handleDeleteChapter(chapterId: string) {
+        if (isReadOnly) {
+            return;
+        }
+
         if (selectedChapterId === chapterId) {
             setSelectedChapterId(null);
         }
@@ -317,7 +355,6 @@ export default function CourseSectionsEditor({
             );
         }
 
-        // READY
         return (
             <ChapterVideoPanel
                 courseId={courseId}
@@ -340,6 +377,12 @@ export default function CourseSectionsEditor({
                             Navigation + réorganisation. Les changements sont enregistrés uniquement via{" "}
                             <strong>Save course</strong>.
                         </p>
+
+                        {isReadOnly ? (
+                            <p className="mt-1 text-sm text-muted-foreground">
+                                Ce cours est <strong>en attente de validation</strong> : l’édition est désactivée.
+                            </p>
+                        ) : null}
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -350,7 +393,13 @@ export default function CourseSectionsEditor({
                             {countChapters(sectionsSorted)} chapitre{countChapters(sectionsSorted) > 1 ? "s" : ""}
                         </Badge>
 
-                        <Button type="button" variant="outline" size="sm" onClick={() => setIsSidebarOpen((v) => !v)}>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsSidebarOpen((v) => !v)}
+                            aria-label={isSidebarOpen ? "Fermer la sidebar" : "Ouvrir la sidebar"}
+                        >
                             {isSidebarOpen ? (
                                 <PanelRightClose className="h-4 w-4"/>
                             ) : (
@@ -369,7 +418,11 @@ export default function CourseSectionsEditor({
                 </div>
             ) : (
                 <div
-                    className={cn("grid gap-6", isSidebarOpen ? "grid-cols-1 lg:grid-cols-[1fr_380px]" : "grid-cols-1")}>
+                    className={cn(
+                        "grid gap-6",
+                        isSidebarOpen ? "grid-cols-1 lg:grid-cols-[1fr_380px]" : "grid-cols-1"
+                    )}
+                >
                     {/* MAIN VIEWER */}
                     <Card className="border-muted/60">
                         <CardHeader className="pb-3">
@@ -384,9 +437,20 @@ export default function CourseSectionsEditor({
                         <CourseStructureSidebar
                             sections={sectionsSorted}
                             selectedChapterId={selectedChapterId}
+                            readOnly={isReadOnly}
                             onSelectChapter={setSelectedChapterId}
-                            onMoveSection={moveSection}
-                            onMoveChapter={moveChapter}
+                            onMoveSection={(sectionId, direction) => {
+                                if (isReadOnly) {
+                                    return;
+                                }
+                                moveSection(sectionId, direction);
+                            }}
+                            onMoveChapter={(sectionId, chapterId, direction) => {
+                                if (isReadOnly) {
+                                    return;
+                                }
+                                moveChapter(sectionId, chapterId, direction);
+                            }}
                             onRenameSection={handleRenameSection}
                             onDeleteSection={handleDeleteSection}
                             onRenameChapter={handleRenameChapter}
@@ -399,8 +463,4 @@ export default function CourseSectionsEditor({
             )}
         </div>
     );
-}
-
-function countChapters(sections: SectionLike[]): number {
-    return sections.reduce((acc, s) => acc + (s.chapters?.length ?? 0), 0);
 }

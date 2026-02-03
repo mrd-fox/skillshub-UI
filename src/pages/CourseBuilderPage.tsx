@@ -93,8 +93,8 @@ export default function CourseBuilderPage() {
                                 : "bg-green-100 text-green-800"
                         }`}
                     >
-            {course.status}
-          </span>
+                        {course.status}
+                    </span>
                 </header>
 
                 {/* 🧩 Informations principales */}

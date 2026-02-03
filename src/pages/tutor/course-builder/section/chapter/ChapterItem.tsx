@@ -15,6 +15,8 @@ type Props = {
     total: number;
     isSelected: boolean;
 
+    readOnly: boolean;
+
     onSelect: (chapterId: string) => void;
     onMoveUp: () => void;
     onMoveDown: () => void;
@@ -28,14 +30,15 @@ export default function ChapterItem({
                                         index,
                                         total,
                                         isSelected,
+                                        readOnly,
                                         onSelect,
                                         onMoveUp,
                                         onMoveDown,
                                         onRenameChapter,
                                         onDeleteChapter,
                                     }: Readonly<Props>) {
-    const [isEditing, setIsEditing] = useState(false);
-    const [draftTitle, setDraftTitle] = useState(chapter.title ?? "");
+    const [isEditing, setIsEditing] = useState<boolean>(false);
+    const [draftTitle, setDraftTitle] = useState<string>(chapter.title ?? "");
     const inputRef = useRef<HTMLInputElement | null>(null);
 
     const canMoveUp = index > 0;
@@ -47,6 +50,12 @@ export default function ChapterItem({
     }, [chapter.id, chapter.title]);
 
     useEffect(() => {
+        if (readOnly) {
+            setIsEditing(false);
+        }
+    }, [readOnly]);
+
+    useEffect(() => {
         if (isEditing) {
             requestAnimationFrame(() => {
                 inputRef.current?.focus();
@@ -56,15 +65,23 @@ export default function ChapterItem({
     }, [isEditing]);
 
     function commit() {
-        const trimmed = draftTitle.trim();
+        if (readOnly) {
+            setDraftTitle(chapter.title ?? "");
+            setIsEditing(false);
+            return;
+        }
+
+        const trimmed = (draftTitle ?? "").trim();
         if (trimmed.length === 0) {
             setDraftTitle(chapter.title ?? "");
             setIsEditing(false);
             return;
         }
+
         if (trimmed !== chapter.title) {
             onRenameChapter(chapter.id, trimmed);
         }
+
         setIsEditing(false);
     }
 
@@ -73,13 +90,13 @@ export default function ChapterItem({
         setIsEditing(false);
     }
 
+    const disableActions = readOnly || isEditing;
+
     return (
         <div
             className={cn(
                 "grid grid-cols-[1fr_auto] items-start gap-2 rounded-lg border p-2",
-                isSelected
-                    ? "border-primary/50 bg-primary/5"
-                    : "border-muted/60 hover:bg-muted/30"
+                isSelected ? "border-primary/50 bg-primary/5" : "border-muted/60 hover:bg-muted/30"
             )}
         >
             {/* Selection / title */}
@@ -108,6 +125,7 @@ export default function ChapterItem({
                         onBlur={commit}
                         className="h-9"
                         aria-label="Rename chapter"
+                        disabled={readOnly}
                     />
                 ) : (
                     <div className="min-w-0">
@@ -134,9 +152,13 @@ export default function ChapterItem({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    disabled={isEditing}
+                    disabled={disableActions}
                     aria-label="Rename chapter"
-                    onClick={() => setIsEditing(true)}
+                    onClick={() => {
+                        if (!readOnly) {
+                            setIsEditing(true);
+                        }
+                    }}
                 >
                     <Pencil className="h-4 w-4"/>
                 </Button>
@@ -146,22 +168,36 @@ export default function ChapterItem({
                     variant="ghost"
                     size="icon"
                     className="text-destructive hover:text-destructive"
+                    disabled={readOnly}
                     aria-label="Delete chapter"
-                    onClick={() => onDeleteChapter(chapter.id)}
+                    onClick={() => {
+                        if (!readOnly) {
+                            onDeleteChapter(chapter.id);
+                        }
+                    }}
                 >
                     <Trash2 className="h-4 w-4"/>
                 </Button>
 
                 <MoveButton
                     label="Déplacer le chapitre vers le haut"
-                    disabled={!canMoveUp || isEditing}
-                    onClick={onMoveUp}
+                    disabled={readOnly || !canMoveUp || isEditing}
+                    onClick={() => {
+                        if (!readOnly) {
+                            onMoveUp();
+                        }
+                    }}
                     icon={<ArrowUp className="h-4 w-4"/>}
                 />
+
                 <MoveButton
                     label="Déplacer le chapitre vers le bas"
-                    disabled={!canMoveDown || isEditing}
-                    onClick={onMoveDown}
+                    disabled={readOnly || !canMoveDown || isEditing}
+                    onClick={() => {
+                        if (!readOnly) {
+                            onMoveDown();
+                        }
+                    }}
                     icon={<ArrowDown className="h-4 w-4"/>}
                 />
             </div>

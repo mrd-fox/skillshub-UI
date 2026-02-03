@@ -72,10 +72,17 @@ type UpdateChapterRequest = {
 
 type CourseBuilderContextValue = {
     courseId: string;
+
     course: CourseResponse | null;
     setCourse: React.Dispatch<React.SetStateAction<CourseResponse | null>>;
+
+    // Selection: single source of truth for the chapter currently displayed in the viewer.
+    selectedChapterId: string | null;
+    setSelectedChapterId: React.Dispatch<React.SetStateAction<string | null>>;
+
     loading: boolean;
     saving: boolean;
+
     refreshCourse: () => Promise<void>;
     saveCourse: (partial: Partial<CourseResponse>) => Promise<CourseResponse | null>;
 };
@@ -98,12 +105,16 @@ export default function CourseBuilderLayout() {
     const resolvedCourseId = courseId ?? "";
 
     const [course, setCourse] = useState<CourseResponse | null>(null);
+
     // IMPORTANT: keep the Outlet mounted.
     // "loading" is only for the FIRST fetch (course=null).
     // Background refreshes (polling, manual refresh) DO NOT change loading state,
     // otherwise the Outlet unmounts/remounts and triggers an infinite refresh loop.
     const [loading, setLoading] = useState<boolean>(true);
     const [saving, setSaving] = useState<boolean>(false);
+
+    // Chapter selection (for the central viewer).
+    const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
 
     const activeTab = useMemo(() => {
         const path = location.pathname;
@@ -131,8 +142,9 @@ export default function CourseBuilderLayout() {
             // Set loading state only on first fetch (when prevCourse is null)
             if (prevCourse === null) {
                 setLoading(true);
+            } else {
+                // For subsequent refreshes (polling, manual), keep the UI mounted by NOT changing loading state
             }
-            // For subsequent refreshes (polling, manual), keep the UI mounted by NOT changing loading state
             return prevCourse;
         });
 
@@ -151,10 +163,14 @@ export default function CourseBuilderLayout() {
 
         if (partial.title !== undefined) {
             req.title = partial.title ?? null;
+        } else {
+            // no-op
         }
 
         if (partial.description !== undefined) {
             req.description = partial.description ?? null;
+        } else {
+            // no-op
         }
 
         // Free course: price can be 0. Null/undefined means "no update" or "unset in UI".
@@ -164,6 +180,8 @@ export default function CourseBuilderLayout() {
             } else {
                 req.price = Number(partial.price);
             }
+        } else {
+            // no-op
         }
 
         if (partial.sections !== undefined) {
@@ -185,6 +203,8 @@ export default function CourseBuilderLayout() {
                     };
                 });
             }
+        } else {
+            // no-op
         }
 
         return req;
@@ -221,6 +241,9 @@ export default function CourseBuilderLayout() {
     }
 
     useEffect(() => {
+        // Reset selection when switching to another course.
+        setSelectedChapterId(null);
+
         void refreshCourse();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [resolvedCourseId]);
@@ -230,12 +253,16 @@ export default function CourseBuilderLayout() {
             courseId: resolvedCourseId,
             course,
             setCourse,
+
+            selectedChapterId,
+            setSelectedChapterId,
+
             loading,
             saving,
             refreshCourse,
             saveCourse,
         };
-    }, [resolvedCourseId, course, loading, saving, refreshCourse]);
+    }, [resolvedCourseId, course, selectedChapterId, loading, saving, refreshCourse]);
 
     if (!resolvedCourseId) {
         return (
@@ -300,11 +327,6 @@ export default function CourseBuilderLayout() {
                     </Card>
 
                     <div className="mt-6">
-                        {/*
-                          Keep the Outlet mounted.
-                          If we unmount it during background refreshes, hooks like useCoursePolling re-mount and
-                          immediately call refreshCourse again, causing a tight refresh loop.
-                        */}
                         {loading && course === null ? (
                             <div className="flex h-[55vh] items-center justify-center">
                                 <Loader2 className="h-6 w-6 animate-spin"/>

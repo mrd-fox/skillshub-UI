@@ -36,6 +36,9 @@ type Props = {
     // Chapter actions
     onRenameChapter: (chapterId: string, nextTitle: string) => void;
     onDeleteChapter: (chapterId: string) => void;
+
+    // NEW: add section
+    onAddSection: () => void;
 };
 
 export default function CourseStructureSidebar({
@@ -48,6 +51,7 @@ export default function CourseStructureSidebar({
                                                    onDeleteSection,
                                                    onRenameChapter,
                                                    onDeleteChapter,
+                                                   onAddSection,
                                                }: Readonly<Props>) {
     const totalChapters = useMemo(() => {
         return sections.reduce((acc, s) => acc + (s.chapters?.length ?? 0), 0);
@@ -74,6 +78,17 @@ export default function CourseStructureSidebar({
                     </div>
                 </div>
             </CardHeader>
+
+            {/* ACTION: ADD SECTION */}
+            <div className="px-6 pb-3">
+                <button
+                    type="button"
+                    className="w-full rounded-md border border-dashed px-3 py-2 text-sm font-medium text-muted-foreground transition hover:border-primary hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    onClick={onAddSection}
+                >
+                    + Ajouter une section
+                </button>
+            </div>
 
             <CardContent className="space-y-3">
                 <Accordion type="multiple" className="space-y-3">
@@ -105,12 +120,8 @@ export default function CourseStructureSidebar({
                                                 total={section.chapters.length}
                                                 isSelected={selectedChapterId === chapter.id}
                                                 onSelect={onSelectChapter}
-                                                onMoveUp={() =>
-                                                    onMoveChapter(sectionIndex, chapterIndex, "UP")
-                                                }
-                                                onMoveDown={() =>
-                                                    onMoveChapter(sectionIndex, chapterIndex, "DOWN")
-                                                }
+                                                onMoveUp={() => onMoveChapter(sectionIndex, chapterIndex, "UP")}
+                                                onMoveDown={() => onMoveChapter(sectionIndex, chapterIndex, "DOWN")}
                                                 onRenameChapter={onRenameChapter}
                                                 onDeleteChapter={onDeleteChapter}
                                             />

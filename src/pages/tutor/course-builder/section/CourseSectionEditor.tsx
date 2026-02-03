@@ -114,6 +114,30 @@ export default function CourseSectionsEditor({
         return null;
     }, [sectionsSorted, selectedChapterId]);
 
+    function handleAddSection() {
+        setCourse((prev) => {
+            const existing = prev.sections ?? [];
+
+            const nextPosition =
+                existing.length === 0
+                    ? 1
+                    : Math.max(...existing.map((s) => s.position ?? 0)) + 1;
+
+            const newSection: SectionLike = {
+                //NB! works in moderns browsers
+                id: crypto.randomUUID(),
+                title: "Nouvelle section",
+                position: nextPosition,
+                chapters: [],
+            };
+
+            return {
+                ...prev,
+                sections: [...existing, newSection],
+            };
+        });
+    }
+
     function handleRenameSection(sectionId: string, nextTitle: string) {
         const normalized = (nextTitle ?? "").trim();
         if (normalized.length === 0) {
@@ -139,7 +163,6 @@ export default function CourseSectionsEditor({
     }
 
     function handleDeleteSection(sectionId: string) {
-        // Decide selection reset outside setCourse (no side-effects in state setter)
         const deleted = (course.sections ?? []).find((s) => s.id === sectionId);
         const shouldResetSelection =
             Boolean(deleted) &&
@@ -228,7 +251,7 @@ export default function CourseSectionsEditor({
                             {countChapters(sectionsSorted) > 1 ? "s" : ""}
                         </Badge>
 
-                        <Button variant="outline" size="sm" onClick={() => setIsSidebarOpen((v) => !v)}>
+                        <Button type="button" variant="outline" size="sm" onClick={() => setIsSidebarOpen((v) => !v)}>
                             {isSidebarOpen ? <PanelRightClose className="h-4 w-4"/> :
                                 <PanelRightOpen className="h-4 w-4"/>}
                         </Button>
@@ -280,6 +303,7 @@ export default function CourseSectionsEditor({
                             onDeleteSection={handleDeleteSection}
                             onRenameChapter={handleRenameChapter}
                             onDeleteChapter={handleDeleteChapter}
+                            onAddSection={handleAddSection}
                         />
                     ) : null}
                 </div>

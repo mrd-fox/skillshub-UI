@@ -15,11 +15,6 @@ describe("Protected Route Redirect (Unauthenticated) - Gateway decoupled", () =>
         }).as("debugGetAll");
     }
 
-    /**
-     * We only assert the FIRST redirect step: /api/auth/login.
-     * The rest of the OAuth2 chain may be server-side redirects or cross-origin (Keycloak),
-     * which Cypress will not reliably observe in the same test.
-     */
     function interceptGatewayLoginLanding() {
         cy.intercept("GET", "**/api/auth/login", {
             statusCode: 200,
@@ -34,19 +29,16 @@ describe("Protected Route Redirect (Unauthenticated) - Gateway decoupled", () =>
 
         cy.intercept("GET", "**/api/auth/me", {
             statusCode: 401,
-            body: {error: "Unauthorized"},
+            body: {error: "Unauthorized"}
         }).as("authMeUnauthorized");
-
         cy.intercept("GET", "**/api/users/me", {
             statusCode: 401,
-            body: {error: "Unauthorized"},
+            body: {error: "Unauthorized"}
         }).as("usersMeUnauthorized");
 
         cy.visit("/dashboard/tutor");
 
         cy.wait("@authMeUnauthorized", {timeout: 10000});
-
-        // ✅ The only stable assertion for this scope
         cy.wait("@gatewayLogin", {timeout: 10000});
     });
 
@@ -57,13 +49,9 @@ describe("Protected Route Redirect (Unauthenticated) - Gateway decoupled", () =>
         cy.intercept("GET", "**/api/auth/me", {
             statusCode: 401,
             delay: 500,
-            body: {error: "Unauthorized"},
+            body: {error: "Unauthorized"}
         }).as("authMeDelayed");
-
-        cy.intercept("GET", "**/api/users/me", {
-            statusCode: 401,
-            body: {error: "Unauthorized"},
-        }).as("usersMeDelayed");
+        cy.intercept("GET", "**/api/users/me", {statusCode: 401, body: {error: "Unauthorized"}}).as("usersMeDelayed");
 
         cy.visit("/dashboard/tutor");
 
@@ -86,10 +74,7 @@ describe("Protected Route Redirect (Unauthenticated) - Gateway decoupled", () =>
             },
         }).as("authMeTechnical");
 
-        cy.intercept("GET", "**/api/users/me", {
-            statusCode: 401,
-            body: {error: "Unauthorized"},
-        }).as("usersMeTechnical");
+        cy.intercept("GET", "**/api/users/me", {statusCode: 401, body: {error: "Unauthorized"}}).as("usersMeTechnical");
 
         cy.visit("/dashboard/tutor");
 
@@ -107,21 +92,10 @@ describe("Protected Route Redirect (Unauthenticated) - Gateway decoupled", () =>
         addHttpDebugLogger();
         interceptGatewayLoginLanding();
 
-        cy.intercept("GET", "**/api/auth/me", {
-            statusCode: 401,
-            body: {error: "Unauthorized"},
-        }).as("authMe401");
+        cy.intercept("GET", "**/api/auth/me", {statusCode: 401, body: {error: "Unauthorized"}}).as("authMe401");
+        cy.intercept("GET", "**/api/users/me", {statusCode: 401, body: {error: "Unauthorized"}}).as("usersMe401");
 
-        cy.intercept("GET", "**/api/users/me", {
-            statusCode: 401,
-            body: {error: "Unauthorized"},
-        }).as("usersMe401");
-
-        const protectedRoutes = [
-            "/dashboard/tutor",
-            "/dashboard/tutor/courses",
-            "/dashboard/tutor/create",
-        ];
+        const protectedRoutes = ["/dashboard/tutor", "/dashboard/tutor/courses", "/dashboard/tutor/create"];
 
         cy.wrap(protectedRoutes).each((route) => {
             cy.visit(String(route));
@@ -131,30 +105,88 @@ describe("Protected Route Redirect (Unauthenticated) - Gateway decoupled", () =>
         });
     });
 
-    it("should NOT redirect on network error (only 401 redirects)", () => {
+    it("should NOT redirect on technical error (only 401/403 redirects)", () => {
         addHttpDebugLogger();
 
-        // Track if login is hit (it must NOT be hit)
         cy.intercept("GET", "**/api/auth/login", {
             statusCode: 200,
             headers: {"content-type": "text/html"},
             body: "<html><body>Mock Gateway Login Landing</body></html>",
         }).as("gatewayLogin");
 
-        cy.intercept("GET", "**/api/auth/me", {
-            forceNetworkError: true,
-        }).as("authMeNetworkError");
-
+        cy.intercept("GET", "**/api/auth/me", {statusCode: 503, body: {error: "Service Unavailable"}}).as("authMe503");
         cy.intercept("GET", "**/api/users/me", {
-            statusCode: 401,
-            body: {error: "Unauthorized"},
-        }).as("usersMeNetworkError");
+            statusCode: 503,
+            body: {error: "Service Unavailable"}
+        }).as("usersMe503");
 
         cy.visit("/dashboard/tutor");
 
-        cy.wait("@authMeNetworkError", {timeout: 10000});
+        cy.wait("@authMe503", {timeout: 10000});
 
-        // Ensure /api/auth/login was NOT called
+        cy.contains("Service indisponible", {timeout: 4000}).should("be.visible");
+        cy.contains("Impossible de vérifier votre session", {timeout: 4000}).should("be.visible");
+
+        cy.wait(500);
+
+        cy.get("@gatewayLogin.all").then((calls) => {
+            expect(calls.length).to.equal(0);
+        });
+
+        cy.location("pathname").should("include", "/dashboard/tutor");
+    });
+
+    it("should allow manual retry from technical error screen", () => {
+        addHttpDebugLogger();
+
+        cy.intercept("GET", "**/api/auth/login", {
+            statusCode: 200,
+            headers: {"content-type": "text/html"},
+            body: "<html><body>Mock Gateway Login Landing</body></html>",
+        }).as("gatewayLogin");
+
+        // Phase 1: technical outage on auth/me
+        cy.intercept("GET", "**/api/auth/me", {
+            statusCode: 503,
+            body: {error: "Service Unavailable"}
+        }).as("authMeOutage");
+
+        cy.visit("/dashboard/tutor");
+
+        cy.wait("@authMeOutage", {timeout: 10000});
+        cy.contains("Service indisponible", {timeout: 4000}).should("be.visible");
+
+        // Phase 2: recovery (set intercepts BEFORE clicking retry)
+        cy.intercept("GET", "**/api/auth/me", {
+            statusCode: 200,
+            body: {
+                id: "auth-user-123",
+                email: "tutor@test.com",
+                roles: ["TUTOR", "STUDENT"],
+            },
+        }).as("authMeOk");
+
+        cy.intercept("GET", "**/api/users/me", {
+            statusCode: 200,
+            body: {
+                created: false,
+                user: {
+                    id: "internal-user-456",
+                    externalId: "auth-user-123",
+                    firstName: "Test",
+                    lastName: "Tutor",
+                    email: "tutor@test.com",
+                    active: true,
+                    roles: [{name: "TUTOR"}, {name: "STUDENT"}],
+                },
+            },
+        }).as("usersMeOk");
+
+        cy.contains("Réessayer", {timeout: 4000}).click();
+
+        cy.wait("@authMeOk", {timeout: 10000});
+        cy.wait("@usersMeOk", {timeout: 10000});
+
         cy.get("@gatewayLogin.all").then((calls) => {
             expect(calls.length).to.equal(0);
         });

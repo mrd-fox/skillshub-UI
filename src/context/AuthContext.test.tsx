@@ -405,7 +405,7 @@ describe('AuthContext Integration Tests', () => {
             });
 
             const TestComponent = () => {
-                const {loading, isAuthenticated, internalUser, activeRole, roles} = useAuth();
+                const {loading, isAuthenticated, internalUser, activeRole, roles, profileError} = useAuth();
 
                 if (loading) {
                     return <div>Loading...</div>;
@@ -417,6 +417,7 @@ describe('AuthContext Integration Tests', () => {
                         <div data-testid="internal-user">{internalUser ? 'present' : 'null'}</div>
                         <div data-testid="active-role">{activeRole || 'null'}</div>
                         <div data-testid="roles">{roles.length === 0 ? 'empty' : roles.join(',')}</div>
+                        <div data-testid="profile-error">{profileError ? profileError.status : 'null'}</div>
                     </div>
                 );
             };
@@ -431,11 +432,13 @@ describe('AuthContext Integration Tests', () => {
                 expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
             });
 
-            // Should reset everything on error
-            expect(screen.getByTestId('is-authenticated')).toHaveTextContent('false');
+            // Session is valid (auth/me succeeded) but profile is unauthorized
+            // This is the correct behavior: user is authenticated but cannot access internal profile
+            expect(screen.getByTestId('is-authenticated')).toHaveTextContent('true');
             expect(screen.getByTestId('internal-user')).toHaveTextContent('null');
             expect(screen.getByTestId('active-role')).toHaveTextContent('null');
             expect(screen.getByTestId('roles')).toHaveTextContent('empty');
+            expect(screen.getByTestId('profile-error')).toHaveTextContent('401');
 
             // Verify both API calls were attempted
             expect(api.get).toHaveBeenCalledWith('/auth/me');
@@ -480,6 +483,71 @@ describe('AuthContext Integration Tests', () => {
             expect(screen.getByTestId('is-authenticated')).toHaveTextContent('false');
             expect(screen.getByTestId('internal-user')).toHaveTextContent('null');
             expect(screen.getByTestId('active-role')).toHaveTextContent('null');
+        });
+
+        it('should handle technical error (503) on /users/me after successful /auth/me', async () => {
+            const mockAuthUser = {
+                id: 'auth-tech',
+                email: 'tech@test.com',
+                roles: ['STUDENT'],
+            };
+
+            const apiError: ApiError = {
+                status: 503,
+                message: 'Service indisponible. Réessayez plus tard.',
+            };
+
+            vi.mocked(api.get).mockImplementation((url: string) => {
+                if (url === '/auth/me') {
+                    return Promise.resolve({data: mockAuthUser});
+                }
+                if (url === '/users/me') {
+                    return Promise.reject(apiError);
+                }
+                return Promise.reject(new Error('Unknown endpoint'));
+            });
+
+            const TestComponent = () => {
+                const {loading, isAuthenticated, internalUser, activeRole, roles, profileError, authError} = useAuth();
+
+                if (loading) {
+                    return <div>Loading...</div>;
+                }
+
+                return (
+                    <div>
+                        <div data-testid="is-authenticated">{isAuthenticated ? 'true' : 'false'}</div>
+                        <div data-testid="internal-user">{internalUser ? 'present' : 'null'}</div>
+                        <div data-testid="active-role">{activeRole || 'null'}</div>
+                        <div data-testid="roles">{roles.length === 0 ? 'empty' : roles.join(',')}</div>
+                        <div data-testid="profile-error">{profileError ? profileError.status : 'null'}</div>
+                        <div data-testid="auth-error">{authError ? authError.status : 'null'}</div>
+                    </div>
+                );
+            };
+
+            render(
+                <AuthProvider>
+                    <TestComponent/>
+                </AuthProvider>
+            );
+
+            await waitFor(() => {
+                expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+            });
+
+            // Technical error on profile: session remains authenticated but profile is unavailable
+            expect(screen.getByTestId('is-authenticated')).toHaveTextContent('true');
+            expect(screen.getByTestId('internal-user')).toHaveTextContent('null');
+            expect(screen.getByTestId('active-role')).toHaveTextContent('null');
+            expect(screen.getByTestId('roles')).toHaveTextContent('empty');
+            expect(screen.getByTestId('profile-error')).toHaveTextContent('503');
+            expect(screen.getByTestId('auth-error')).toHaveTextContent('null');
+
+            // Verify both API calls were attempted
+            expect(api.get).toHaveBeenCalledWith('/auth/me');
+            expect(api.get).toHaveBeenCalledWith('/users/me');
+            expect(api.get).toHaveBeenCalledTimes(2);
         });
     });
 

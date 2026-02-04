@@ -18,8 +18,6 @@ export default function ProtectedRoute({children, requiredRoles}: ProtectedRoute
         authError,
         profileError,
         retryBootstrap,
-        clearAuthError,
-        clearProfileError,
     } = useAuth();
 
     // 1) Bootstrap in progress

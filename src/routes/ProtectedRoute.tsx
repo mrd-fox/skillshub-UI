@@ -1,4 +1,4 @@
-import {ReactNode, useEffect} from "react";
+import {ReactNode, useEffect, useMemo} from "react";
 import {Loader2} from "lucide-react";
 import {Navigate} from "react-router-dom";
 import {useAuth} from "@/context/AuthContext.tsx";
@@ -19,6 +19,15 @@ export default function ProtectedRoute({children, requiredRoles}: ProtectedRoute
         profileError,
         retryBootstrap,
     } = useAuth();
+
+    const isLogoutInProgress = useMemo(() => {
+        return globalThis.sessionStorage?.getItem("isLoggingOut") === "true";
+    }, []);
+
+    // 0) Logout in progress -> NEVER auto-login, always exit protected area
+    if (isLogoutInProgress) {
+        return <Navigate to="/" replace/>;
+    }
 
     // 1) Bootstrap in progress
     if (loading) {
@@ -106,7 +115,6 @@ export default function ProtectedRoute({children, requiredRoles}: ProtectedRoute
                         type="button"
                         className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground"
                         onClick={() => {
-                            // Optional: allow user to explicitly exit
                             logout();
                         }}
                     >
@@ -142,6 +150,10 @@ export default function ProtectedRoute({children, requiredRoles}: ProtectedRoute
 
 function LoginRedirect({login}: { login: () => void }) {
     useEffect(() => {
+        // Safety: never auto-login if a logout flag is present (can happen on fast navigations)
+        if (globalThis.sessionStorage?.getItem("isLoggingOut") === "true") {
+            return;
+        }
         login();
     }, [login]);
 

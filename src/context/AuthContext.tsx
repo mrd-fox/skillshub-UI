@@ -1,4 +1,4 @@
-import {createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState} from "react";
+import {createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState} from "react";
 import api, {ApiError} from "@/api/axios";
 
 export interface AuthContextType {
@@ -94,6 +94,17 @@ export function AuthProvider({children}: { children: ReactNode }) {
 
     const [bootstrapNonce, setBootstrapNonce] = useState(0);
 
+    // Flag to prevent bootstrap during logout process (persist across reloads)
+    const [isLoggingOut, setIsLoggingOut] = useState(() => {
+        return globalThis.sessionStorage?.getItem("isLoggingOut") === "true";
+    });
+
+    // Keep latest isLoggingOut in a ref to check in bootstrap without triggering re-renders
+    const isLoggingOutRef = useRef<boolean>(isLoggingOut);
+    useEffect(() => {
+        isLoggingOutRef.current = isLoggingOut;
+    }, [isLoggingOut]);
+
     // Keep latest activeRole to avoid stale closure in bootstrap.
     const activeRoleRef = useRef<string | null>(null);
     useEffect(() => {
@@ -107,26 +118,6 @@ export function AuthProvider({children}: { children: ReactNode }) {
             return [];
         }
     }, [internalUser]);
-
-    const login = () => {
-        globalThis.location.assign(`${API_ROOT}/auth/login`);
-    };
-
-    const logout = () => {
-        globalThis.location.assign(`${API_ROOT}/auth/logout`);
-    };
-
-    const clearAuthError = () => {
-        setAuthError(null);
-    };
-
-    const clearProfileError = () => {
-        setProfileError(null);
-    };
-
-    const retryBootstrap = () => {
-        setBootstrapNonce((n) => n + 1);
-    };
 
     const resolveDefaultRole = (currentRoles: string[]) => {
         if (currentRoles.includes("ADMIN")) {
@@ -145,6 +136,7 @@ export function AuthProvider({children}: { children: ReactNode }) {
         setAuthUser(null);
         setInternalUser(null);
         setActiveRole(null);
+        setLoading(false);
     }
 
     function isAuthFailure(err: ApiError): boolean {
@@ -152,15 +144,55 @@ export function AuthProvider({children}: { children: ReactNode }) {
     }
 
     function isTechnicalFailure(err: ApiError): boolean {
-        // ApiError.status comes from axios interceptor mapping.
-        // 5xx and generic 500 for network errors are treated as technical failures.
         return err.status >= 500;
     }
+
+    const login = useCallback(() => {
+        // Clear logout flag to allow bootstrap after login redirect
+        setIsLoggingOut(false);
+        globalThis.sessionStorage?.removeItem("isLoggingOut");
+
+        globalThis.location.assign(`${API_ROOT}/auth/login`);
+    }, [API_ROOT]);
+
+    const logout = useCallback(() => {
+        // Set flag to prevent bootstrap on page reload after logout
+        setIsLoggingOut(true);
+        globalThis.sessionStorage?.setItem("isLoggingOut", "true");
+
+        // Reset all state immediately
+        resetAllState();
+
+        // Clear errors
+        setAuthError(null);
+        setProfileError(null);
+
+        // Redirect to backend logout endpoint
+        globalThis.location.assign(`${API_ROOT}/auth/logout`);
+    }, [API_ROOT]);
+
+    const clearAuthError = useCallback(() => {
+        setAuthError(null);
+    }, []);
+
+    const clearProfileError = useCallback(() => {
+        setProfileError(null);
+    }, []);
+
+    const retryBootstrap = useCallback(() => {
+        setBootstrapNonce((n) => n + 1);
+    }, []);
 
     useEffect(() => {
         let cancelled = false;
 
         async function bootstrap() {
+            // Do not bootstrap if user is logging out (check ref for latest value)
+            if (isLoggingOutRef.current) {
+                setLoading(false);
+                return;
+            }
+
             setLoading(true);
 
             // -------------------------
@@ -173,10 +205,15 @@ export function AuthProvider({children}: { children: ReactNode }) {
                     return;
                 }
 
-                // Clear auth error only on successful auth check
                 setAuthError(null);
                 setAuthUser(authRes.data);
                 setIsAuthenticated(true);
+
+                // IMPORTANT: clear logout flag using the REF (not the state closure)
+                if (isLoggingOutRef.current) {
+                    setIsLoggingOut(false);
+                    globalThis.sessionStorage?.removeItem("isLoggingOut");
+                }
             } catch (e) {
                 const err = e as ApiError;
 
@@ -185,19 +222,14 @@ export function AuthProvider({children}: { children: ReactNode }) {
                 }
 
                 if (isAuthFailure(err)) {
-                    // Session invalid -> reset state.
-                    // 401 redirect is handled in axios interceptor (toast + redirect).
                     resetAllState();
                     setLoading(false);
                     return;
                 }
 
-                // Technical outage: session unknown. Do NOT reset/redirect.
-                // Keep previous state to avoid false logout + redirect loops.
                 if (isTechnicalFailure(err)) {
                     setAuthError(err);
                 } else {
-                    // Any other unexpected error: treat as technical.
                     setAuthError({status: 500, message: "Service indisponible. Réessayez plus tard."});
                 }
 
@@ -205,7 +237,6 @@ export function AuthProvider({children}: { children: ReactNode }) {
                 return;
             }
 
-            // If session is OK, continue
             if (cancelled) {
                 return;
             }
@@ -220,7 +251,6 @@ export function AuthProvider({children}: { children: ReactNode }) {
                     return;
                 }
 
-                // Clear profile error only on successful profile fetch
                 setProfileError(null);
 
                 const envelope = userRes.data;
@@ -240,7 +270,6 @@ export function AuthProvider({children}: { children: ReactNode }) {
 
                 setInternalUser(mappedInternal);
 
-                // Choose a default role if missing/invalid
                 const defaultRole = resolveDefaultRole(assignedRoles);
                 const currentActiveRole = activeRoleRef.current;
 
@@ -256,8 +285,6 @@ export function AuthProvider({children}: { children: ReactNode }) {
                     return;
                 }
 
-                // Profile unauthorized while session is OK:
-                // user must NOT be redirected to login. We'll handle it in ProtectedRoute (unauthorized screen).
                 if (isAuthFailure(err)) {
                     setInternalUser(null);
                     setProfileError(err);
@@ -265,7 +292,6 @@ export function AuthProvider({children}: { children: ReactNode }) {
                     return;
                 }
 
-                // Technical outage on profile: keep session authenticated, expose profileError.
                 if (isTechnicalFailure(err)) {
                     setInternalUser(null);
                     setProfileError(err);
@@ -283,7 +309,7 @@ export function AuthProvider({children}: { children: ReactNode }) {
         return () => {
             cancelled = true;
         };
-    }, [API_ROOT, bootstrapNonce]);
+    }, [bootstrapNonce]);
 
     useEffect(() => {
         if (!internalUser) {
@@ -322,7 +348,7 @@ export function AuthProvider({children}: { children: ReactNode }) {
             clearProfileError,
             retryBootstrap,
         }),
-        [loading, isAuthenticated, authUser, internalUser, roles, activeRole, authError, profileError]
+        [loading, isAuthenticated, authUser, internalUser, roles, activeRole, authError, profileError, login, logout, clearAuthError, clearProfileError, retryBootstrap]
     );
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

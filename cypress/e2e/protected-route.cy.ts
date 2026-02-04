@@ -6,6 +6,14 @@ describe("Protected Route Redirect (Unauthenticated) - Gateway decoupled", () =>
         cy.clearLocalStorage();
     });
 
+    function visitWithCleanSession(route: string) {
+        cy.visit(route, {
+            onBeforeLoad(win) {
+                win.sessionStorage.clear();
+            },
+        });
+    }
+
     function addHttpDebugLogger() {
         cy.intercept("GET", "**/*", (req) => {
             if (req.url.includes("auth") || req.url.includes("users") || req.url.includes("oauth2")) {
@@ -29,14 +37,15 @@ describe("Protected Route Redirect (Unauthenticated) - Gateway decoupled", () =>
 
         cy.intercept("GET", "**/api/auth/me", {
             statusCode: 401,
-            body: {error: "Unauthorized"}
+            body: {error: "Unauthorized"},
         }).as("authMeUnauthorized");
+
         cy.intercept("GET", "**/api/users/me", {
             statusCode: 401,
-            body: {error: "Unauthorized"}
+            body: {error: "Unauthorized"},
         }).as("usersMeUnauthorized");
 
-        cy.visit("/dashboard/tutor");
+        visitWithCleanSession("/dashboard/tutor");
 
         cy.wait("@authMeUnauthorized", {timeout: 10000});
         cy.wait("@gatewayLogin", {timeout: 10000});
@@ -49,11 +58,15 @@ describe("Protected Route Redirect (Unauthenticated) - Gateway decoupled", () =>
         cy.intercept("GET", "**/api/auth/me", {
             statusCode: 401,
             delay: 500,
-            body: {error: "Unauthorized"}
+            body: {error: "Unauthorized"},
         }).as("authMeDelayed");
-        cy.intercept("GET", "**/api/users/me", {statusCode: 401, body: {error: "Unauthorized"}}).as("usersMeDelayed");
 
-        cy.visit("/dashboard/tutor");
+        cy.intercept("GET", "**/api/users/me", {
+            statusCode: 401,
+            body: {error: "Unauthorized"},
+        }).as("usersMeDelayed");
+
+        visitWithCleanSession("/dashboard/tutor");
 
         cy.contains("Chargement de la session...", {timeout: 2000}).should("be.visible");
 
@@ -74,9 +87,12 @@ describe("Protected Route Redirect (Unauthenticated) - Gateway decoupled", () =>
             },
         }).as("authMeTechnical");
 
-        cy.intercept("GET", "**/api/users/me", {statusCode: 401, body: {error: "Unauthorized"}}).as("usersMeTechnical");
+        cy.intercept("GET", "**/api/users/me", {
+            statusCode: 401,
+            body: {error: "Unauthorized"},
+        }).as("usersMeTechnical");
 
-        cy.visit("/dashboard/tutor");
+        visitWithCleanSession("/dashboard/tutor");
 
         cy.wait("@authMeTechnical", {timeout: 10000});
 
@@ -92,13 +108,20 @@ describe("Protected Route Redirect (Unauthenticated) - Gateway decoupled", () =>
         addHttpDebugLogger();
         interceptGatewayLoginLanding();
 
-        cy.intercept("GET", "**/api/auth/me", {statusCode: 401, body: {error: "Unauthorized"}}).as("authMe401");
-        cy.intercept("GET", "**/api/users/me", {statusCode: 401, body: {error: "Unauthorized"}}).as("usersMe401");
+        cy.intercept("GET", "**/api/auth/me", {
+            statusCode: 401,
+            body: {error: "Unauthorized"},
+        }).as("authMe401");
+
+        cy.intercept("GET", "**/api/users/me", {
+            statusCode: 401,
+            body: {error: "Unauthorized"},
+        }).as("usersMe401");
 
         const protectedRoutes = ["/dashboard/tutor", "/dashboard/tutor/courses", "/dashboard/tutor/create"];
 
         cy.wrap(protectedRoutes).each((route) => {
-            cy.visit(String(route));
+            visitWithCleanSession(String(route));
 
             cy.wait("@authMe401", {timeout: 10000});
             cy.wait("@gatewayLogin", {timeout: 10000});
@@ -114,13 +137,17 @@ describe("Protected Route Redirect (Unauthenticated) - Gateway decoupled", () =>
             body: "<html><body>Mock Gateway Login Landing</body></html>",
         }).as("gatewayLogin");
 
-        cy.intercept("GET", "**/api/auth/me", {statusCode: 503, body: {error: "Service Unavailable"}}).as("authMe503");
+        cy.intercept("GET", "**/api/auth/me", {
+            statusCode: 503,
+            body: {error: "Service Unavailable"},
+        }).as("authMe503");
+
         cy.intercept("GET", "**/api/users/me", {
             statusCode: 503,
-            body: {error: "Service Unavailable"}
+            body: {error: "Service Unavailable"},
         }).as("usersMe503");
 
-        cy.visit("/dashboard/tutor");
+        visitWithCleanSession("/dashboard/tutor");
 
         cy.wait("@authMe503", {timeout: 10000});
 
@@ -148,10 +175,10 @@ describe("Protected Route Redirect (Unauthenticated) - Gateway decoupled", () =>
         // Phase 1: technical outage on auth/me
         cy.intercept("GET", "**/api/auth/me", {
             statusCode: 503,
-            body: {error: "Service Unavailable"}
+            body: {error: "Service Unavailable"},
         }).as("authMeOutage");
 
-        cy.visit("/dashboard/tutor");
+        visitWithCleanSession("/dashboard/tutor");
 
         cy.wait("@authMeOutage", {timeout: 10000});
         cy.contains("Service indisponible", {timeout: 4000}).should("be.visible");

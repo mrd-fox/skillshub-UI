@@ -44,16 +44,27 @@ export default function ChapterItem({
     const canMoveUp = index > 0;
     const canMoveDown = index < total - 1;
 
+    // Keep local draft stable across polling refreshes.
+    // Only reset when the chapter identity changes.
     useEffect(() => {
         setDraftTitle(chapter.title ?? "");
         setIsEditing(false);
-    }, [chapter.id, chapter.title]);
+    }, [chapter.id]);
 
+    // If backend/UI enters readOnly, force-stop editing.
     useEffect(() => {
         if (readOnly) {
             setIsEditing(false);
+            setDraftTitle(chapter.title ?? "");
         }
-    }, [readOnly]);
+    }, [readOnly, chapter.title]);
+
+    // If not editing, reflect external title changes (rare).
+    useEffect(() => {
+        if (!isEditing) {
+            setDraftTitle(chapter.title ?? "");
+        }
+    }, [chapter.title, isEditing]);
 
     useEffect(() => {
         if (isEditing) {
@@ -65,13 +76,14 @@ export default function ChapterItem({
     }, [isEditing]);
 
     function commit() {
+        const trimmed = (draftTitle ?? "").trim();
+
         if (readOnly) {
             setDraftTitle(chapter.title ?? "");
             setIsEditing(false);
             return;
         }
 
-        const trimmed = (draftTitle ?? "").trim();
         if (trimmed.length === 0) {
             setDraftTitle(chapter.title ?? "");
             setIsEditing(false);
@@ -90,7 +102,7 @@ export default function ChapterItem({
         setIsEditing(false);
     }
 
-    const disableActions = readOnly || isEditing;
+    const actionsLocked = readOnly || isEditing;
 
     return (
         <div
@@ -99,7 +111,7 @@ export default function ChapterItem({
                 isSelected ? "border-primary/50 bg-primary/5" : "border-muted/60 hover:bg-muted/30"
             )}
         >
-            {/* Selection / title */}
+            {/* Selection / title (selection stays enabled even in readOnly) */}
             <button
                 type="button"
                 className={cn(
@@ -152,13 +164,9 @@ export default function ChapterItem({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    disabled={disableActions}
+                    disabled={actionsLocked}
                     aria-label="Rename chapter"
-                    onClick={() => {
-                        if (!readOnly) {
-                            setIsEditing(true);
-                        }
-                    }}
+                    onClick={() => setIsEditing(true)}
                 >
                     <Pencil className="h-4 w-4"/>
                 </Button>
@@ -170,11 +178,7 @@ export default function ChapterItem({
                     className="text-destructive hover:text-destructive"
                     disabled={readOnly}
                     aria-label="Delete chapter"
-                    onClick={() => {
-                        if (!readOnly) {
-                            onDeleteChapter(chapter.id);
-                        }
-                    }}
+                    onClick={() => onDeleteChapter(chapter.id)}
                 >
                     <Trash2 className="h-4 w-4"/>
                 </Button>
@@ -182,22 +186,14 @@ export default function ChapterItem({
                 <MoveButton
                     label="Déplacer le chapitre vers le haut"
                     disabled={readOnly || !canMoveUp || isEditing}
-                    onClick={() => {
-                        if (!readOnly) {
-                            onMoveUp();
-                        }
-                    }}
+                    onClick={onMoveUp}
                     icon={<ArrowUp className="h-4 w-4"/>}
                 />
 
                 <MoveButton
                     label="Déplacer le chapitre vers le bas"
                     disabled={readOnly || !canMoveDown || isEditing}
-                    onClick={() => {
-                        if (!readOnly) {
-                            onMoveDown();
-                        }
-                    }}
+                    onClick={onMoveDown}
                     icon={<ArrowDown className="h-4 w-4"/>}
                 />
             </div>

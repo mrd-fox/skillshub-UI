@@ -108,18 +108,14 @@ export default function CourseStructureSidebar({
                     </Accordion>
                 </div>
 
-                {/* Sticky footer actions (always visible) */}
+                {/* Sticky footer actions */}
                 <div className="border-t bg-background px-6 py-3">
                     <Button
                         type="button"
                         variant="outline"
                         className="w-full border-dashed text-muted-foreground hover:text-primary"
                         disabled={readOnly}
-                        onClick={() => {
-                            if (!readOnly) {
-                                onAddSection();
-                            }
-                        }}
+                        onClick={onAddSection}
                     >
                         + Ajouter une section
                     </Button>

@@ -111,6 +111,23 @@ function isClientKey(id: string | null | undefined): boolean {
     return value.startsWith("client:");
 }
 
+function hasProcessingVideo(course: CourseResponse | null): boolean {
+    if (!course) {
+        return false;
+    }
+
+    for (const section of course.sections ?? []) {
+        for (const chapter of section.chapters ?? []) {
+            const status = chapter.video?.status ?? null;
+            if (status === "PROCESSING") {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 function getCourseStatusLabel(status: CourseStatusEnum): string {
     if (status === "DRAFT") {
         return "Brouillon";
@@ -161,7 +178,6 @@ function computePublishGate(course: CourseResponse | null): PublishGate {
         }
     }
 
-    // MVP rule: every chapter must have a READY video.
     if (course.status === "WAITING_VALIDATION") {
         return result;
     }
@@ -185,6 +201,7 @@ function computePublishGate(course: CourseResponse | null): PublishGate {
 function getPublishTooltipText(args: Readonly<{
     course: CourseResponse | null;
     isWaitingValidation: boolean;
+    processingLock: boolean;
     gate: PublishGate;
 }>): string {
     if (!args.course) {
@@ -193,6 +210,10 @@ function getPublishTooltipText(args: Readonly<{
 
     if (args.isWaitingValidation) {
         return "Ce cours est en attente de validation : édition et publication bloquées.";
+    }
+
+    if (args.processingLock) {
+        return "Une vidéo est en PROCESSING : sauvegarde et modification de structure bloquées (upload vidéo toujours possible sur chapitres déjà enregistrés).";
     }
 
     if (args.gate.totalChapters <= 0) {
@@ -225,15 +246,12 @@ export default function CourseBuilderLayout() {
 
     const [course, setCourse] = useState<CourseResponse | null>(null);
 
-    // Only for initial fetch (course=null). Must not unmount Outlet on background refresh.
     const [loading, setLoading] = useState<boolean>(true);
     const [saving, setSaving] = useState<boolean>(false);
     const [publishing, setPublishing] = useState<boolean>(false);
 
-    // Chapter selection (for the central viewer).
     const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
 
-    // Tracks the first fetch for the CURRENT courseId.
     const hasFetchedOnceRef = useRef<boolean>(false);
 
     const activeTab = useMemo(() => {
@@ -252,7 +270,17 @@ export default function CourseBuilderLayout() {
 
     const isWaitingValidation = useMemo(() => {
         return course?.status === "WAITING_VALIDATION";
+    }, [course?.status]);
+
+    const processingLock = useMemo(() => {
+        return hasProcessingVideo(course);
     }, [course]);
+
+    // Lock: prevents PUT save & prevents publish.
+    // Upload remains allowed at ChapterVideoPanel level (persisted chapters).
+    const structureLocked = useMemo(() => {
+        return Boolean(isWaitingValidation) || Boolean(processingLock);
+    }, [isWaitingValidation, processingLock]);
 
     const isEditable = useMemo(() => {
         return !!course && course.status !== "WAITING_VALIDATION";
@@ -263,8 +291,8 @@ export default function CourseBuilderLayout() {
     }, [course]);
 
     const publishTooltipText = useMemo(() => {
-        return getPublishTooltipText({course, isWaitingValidation, gate: publishGate});
-    }, [course, isWaitingValidation, publishGate]);
+        return getPublishTooltipText({course, isWaitingValidation, processingLock, gate: publishGate});
+    }, [course, isWaitingValidation, processingLock, publishGate]);
 
     const courseStatusLabel = useMemo(() => {
         if (!course) {
@@ -285,8 +313,6 @@ export default function CourseBuilderLayout() {
         }
 
         try {
-            // IMPORTANT: axios baseURL already contains "/api".
-            // So routes MUST NOT start with "/api".
             const res = await api.get(`/course/${resolvedCourseId}`);
             setCourse(res.data as CourseResponse);
         } finally {
@@ -306,7 +332,6 @@ export default function CourseBuilderLayout() {
             req.description = partial.description ?? null;
         }
 
-        // Free course: price can be 0. Null/undefined means "no update" or "unset in UI".
         if (partial.price !== undefined) {
             req.price = partial.price === null || partial.price === undefined ? null : Number(partial.price);
         }
@@ -325,7 +350,6 @@ export default function CourseBuilderLayout() {
                                 position: c.position ?? null,
                             };
 
-                            // Backend assigns ids. Never send UI clientKey ids.
                             if (c.id && c.id.trim().length > 0 && !isClientKey(c.id)) {
                                 chapter.id = c.id;
                             }
@@ -334,7 +358,6 @@ export default function CourseBuilderLayout() {
                         }),
                     };
 
-                    // Backend assigns ids. Never send UI clientKey ids.
                     if (s.id && s.id.trim().length > 0 && !isClientKey(s.id)) {
                         section.id = s.id;
                     }
@@ -352,17 +375,28 @@ export default function CourseBuilderLayout() {
             return null;
         }
 
-        if (!isEditable) {
+        if (!course) {
+            return null;
+        }
+
+        if (isWaitingValidation) {
             toast.error("Ce cours est en attente de validation : modification bloquée.");
+            return course;
+        }
+
+        if (processingLock) {
+            toast.error("Sauvegarde bloquée : une vidéo est en PROCESSING. Attendez la fin du traitement.");
+            return course;
+        }
+
+        if (!isEditable) {
+            toast.error("Modification bloquée.");
             return course;
         }
 
         setSaving(true);
         try {
             const payload = mapPartialToUpdateRequest(partial);
-
-            // IMPORTANT: axios baseURL already contains "/api".
-            // So routes MUST NOT start with "/api".
             const res = await api.put(`/course/${resolvedCourseId}`, payload);
 
             const updated = res.data as CourseResponse;
@@ -395,6 +429,11 @@ export default function CourseBuilderLayout() {
             return;
         }
 
+        if (processingLock) {
+            toast.error("Publication bloquée : une vidéo est en PROCESSING.");
+            return;
+        }
+
         if (!publishGate.canPublish) {
             if (publishGate.totalChapters <= 0) {
                 toast.error("Publication impossible : le cours ne contient aucun chapitre.");
@@ -417,7 +456,6 @@ export default function CourseBuilderLayout() {
 
         setPublishing(true);
         try {
-            // Backend route: POST /api/course/{courseId}/publish
             const res = await api.post(`/course/${resolvedCourseId}/publish`, {});
             const updated = res.data as CourseResponse;
             setCourse(updated);
@@ -435,7 +473,6 @@ export default function CourseBuilderLayout() {
     }
 
     useEffect(() => {
-        // Reset per-course state
         setSelectedChapterId(null);
         hasFetchedOnceRef.current = false;
 
@@ -455,7 +492,7 @@ export default function CourseBuilderLayout() {
             refreshCourse,
             saveCourse,
         };
-    }, [resolvedCourseId, course, selectedChapterId, loading, saving, refreshCourse]);
+    }, [resolvedCourseId, course, selectedChapterId, loading, saving, refreshCourse, saveCourse]);
 
     if (!resolvedCourseId) {
         return (
@@ -496,8 +533,8 @@ export default function CourseBuilderLayout() {
                                                     saving ||
                                                     publishing ||
                                                     !course ||
-                                                    !publishGate.canPublish ||
-                                                    isWaitingValidation
+                                                    structureLocked ||
+                                                    !publishGate.canPublish
                                                 }
                                                 className="h-9 rounded-lg"
                                             >
@@ -520,24 +557,39 @@ export default function CourseBuilderLayout() {
                                     </TooltipContent>
                                 </Tooltip>
 
-                                <Button
-                                    size="sm"
-                                    onClick={() => void handleSaveCourse()}
-                                    disabled={loading || saving || publishing || !course || !isEditable}
-                                    className="h-9 rounded-lg"
-                                >
-                                    {saving ? (
-                                        <>
-                                            <Loader2 className="mr-2 h-4 w-4 animate-spin"/>
-                                            Enregistrement...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Save className="mr-2 h-4 w-4"/>
-                                            Enregistrer
-                                        </>
-                                    )}
-                                </Button>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <span>
+                                            <Button
+                                                size="sm"
+                                                onClick={() => void handleSaveCourse()}
+                                                disabled={loading || saving || publishing || !course || structureLocked || !isEditable}
+                                                className="h-9 rounded-lg"
+                                            >
+                                                {saving ? (
+                                                    <>
+                                                        <Loader2 className="mr-2 h-4 w-4 animate-spin"/>
+                                                        Enregistrement...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Save className="mr-2 h-4 w-4"/>
+                                                        Enregistrer
+                                                    </>
+                                                )}
+                                            </Button>
+                                        </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <span>
+                                            {structureLocked
+                                                ? (isWaitingValidation
+                                                    ? "En attente de validation : sauvegarde bloquée."
+                                                    : "Vidéo en PROCESSING : sauvegarde bloquée temporairement.")
+                                                : "Sauvegarder les modifications du cours."}
+                                        </span>
+                                    </TooltipContent>
+                                </Tooltip>
                             </div>
                         </div>
                     </Card>

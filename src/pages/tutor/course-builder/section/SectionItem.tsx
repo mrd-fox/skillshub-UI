@@ -47,6 +47,8 @@ export default function SectionItem({
     const canMoveUp = index > 0;
     const canMoveDown = index < total - 1;
 
+    const actionsLocked = readOnly || isEditing;
+
     useEffect(() => {
         setDraftTitle(section.title ?? "");
         setIsEditing(false);
@@ -68,13 +70,14 @@ export default function SectionItem({
     }, [isEditing]);
 
     function commitRename() {
+        const trimmed = (draftTitle ?? "").trim();
+
         if (readOnly) {
             setDraftTitle(section.title ?? "");
             setIsEditing(false);
             return;
         }
 
-        const trimmed = (draftTitle ?? "").trim();
         if (trimmed.length === 0) {
             setDraftTitle(section.title ?? "");
             setIsEditing(false);
@@ -93,35 +96,29 @@ export default function SectionItem({
         setIsEditing(false);
     }
 
-    const disableActions = readOnly || isEditing;
-
     return (
         <AccordionItem
             value={section.id}
             className={cn(
                 "w-full max-w-full overflow-hidden rounded-xl border",
-                // Section container slightly darker so chapters are easier to distinguish
                 "bg-muted/25"
             )}
         >
             {/* HEADER: tools ABOVE title + chevron */}
             <div className="w-full max-w-full px-3 py-3">
-                {/* Row 1: Tools (top, aligned right) */}
+                {/* Row 1: Tools */}
                 <div className="flex w-full items-center justify-end gap-1 pb-2">
                     <Button
                         type="button"
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7"
-                        disabled={disableActions}
+                        disabled={actionsLocked}
                         aria-label="Rename section"
                         onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-
-                            if (!readOnly) {
-                                setIsEditing(true);
-                            }
+                            setIsEditing(true);
                         }}
                     >
                         <Pencil className="h-4 w-4"/>
@@ -137,10 +134,7 @@ export default function SectionItem({
                         onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-
-                            if (!readOnly) {
-                                onDeleteSection(section.id);
-                            }
+                            onDeleteSection(section.id);
                         }}
                     >
                         <Trash2 className="h-4 w-4"/>
@@ -152,10 +146,7 @@ export default function SectionItem({
                         onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-
-                            if (!readOnly) {
-                                onMoveUp();
-                            }
+                            onMoveUp();
                         }}
                         icon={<ArrowUp className="h-4 w-4"/>}
                     />
@@ -166,16 +157,13 @@ export default function SectionItem({
                         onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-
-                            if (!readOnly) {
-                                onMoveDown();
-                            }
+                            onMoveDown();
                         }}
                         icon={<ArrowDown className="h-4 w-4"/>}
                     />
                 </div>
 
-                {/* Row 2: Title + dropdown chevron (trigger button only) */}
+                {/* Row 2: Title + chevron */}
                 <AccordionTrigger className="w-full min-w-0 py-0 no-underline hover:no-underline">
                     <div className="min-w-0 max-w-full text-left">
                         {isEditing ? (
@@ -211,7 +199,7 @@ export default function SectionItem({
                 </AccordionTrigger>
             </div>
 
-            {/* CONTENT: keep chapters visually "clean" to distinguish from section container */}
+            {/* CONTENT */}
             <AccordionContent className="px-3 pb-4">
                 <div className="space-y-3 rounded-lg border bg-background p-3">
                     {children}
@@ -221,11 +209,7 @@ export default function SectionItem({
                         variant="outline"
                         className="w-full border-dashed text-muted-foreground hover:text-primary"
                         disabled={readOnly}
-                        onClick={() => {
-                            if (!readOnly) {
-                                onAddChapter(section.id);
-                            }
-                        }}
+                        onClick={() => onAddChapter(section.id)}
                     >
                         + Ajouter un chapitre
                     </Button>

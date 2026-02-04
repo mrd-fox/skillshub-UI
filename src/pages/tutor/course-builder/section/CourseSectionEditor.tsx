@@ -4,11 +4,11 @@
  * - NO API calls here
  * - Persistence happens only via the global "Save course" button (outside)
  *
- * Updated:
- * - Central viewer (single ChapterVideoPanel) driven by selectedChapterId from CourseBuilderLayout context
- * - Right sidebar delegated to CourseStructureSidebar
- * - Polling enabled ONLY when at least one video is PROCESSING
- * - Inline rename/delete section + chapter handled at parent level (state only)
+ * Updated (MVP locks):
+ * - Structure changes are blocked when:
+ *   - course.status === WAITING_VALIDATION
+ *   - OR at least one video is PROCESSING (polling active)
+ * - Video upload remains allowed for persisted chapters (non clientKey).
  */
 import {Dispatch, SetStateAction, useMemo, useState} from "react";
 import {PanelRightClose, PanelRightOpen} from "lucide-react";
@@ -71,9 +71,12 @@ function countChapters(sections: SectionLike[]): number {
     return sections.reduce((acc, s) => acc + (s.chapters?.length ?? 0), 0);
 }
 
-function hasProcessingVideo(course: CourseLike): boolean {
-    const sections = course.sections ?? [];
+function hasProcessingVideo(course: CourseLike | null | undefined): boolean {
+    if (!course) {
+        return false;
+    }
 
+    const sections = course.sections ?? [];
     for (const section of sections) {
         const chapters = section.chapters ?? [];
         for (const chapter of chapters) {
@@ -108,12 +111,10 @@ function computeViewerState(selected: SelectedContext): ViewerState {
         return "EMPTY";
     }
 
-    // New items are created with id="client:<uuid>" and are NOT persisted yet.
     if (isClientKey(selected.section.id) || isClientKey(selected.chapter.id)) {
         return "UNSAVED";
     }
 
-    // Persisted ids => upload allowed
     return "READY";
 }
 
@@ -126,13 +127,24 @@ export default function CourseSectionsEditor({
     const {selectedChapterId, setSelectedChapterId, course: builderCourse} = useCourseBuilder();
     const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
 
-    const isReadOnly = useMemo(() => {
-        return builderCourse?.status === "WAITING_VALIDATION";
-    }, [builderCourse?.status]);
+    // Single source of truth: derive locks from builderCourse when available.
+    const effectiveCourse = useMemo(() => {
+        return (builderCourse as unknown as CourseLike | null) ?? course;
+    }, [builderCourse, course]);
 
-    // Enable polling ONLY when at least one video is PROCESSING.
-    const shouldPoll = useMemo(() => hasProcessingVideo(course), [course]);
-    useCoursePolling(course as any, refreshCourse, {enabled: shouldPoll, intervalMs: 3000});
+    const isWaitingValidation = useMemo(() => {
+        return (builderCourse as any)?.status === "WAITING_VALIDATION";
+    }, [builderCourse]);
+
+    const processingLock = useMemo(() => {
+        return hasProcessingVideo(effectiveCourse);
+    }, [effectiveCourse]);
+
+    const structureLocked = useMemo(() => {
+        return isWaitingValidation || processingLock;
+    }, [isWaitingValidation, processingLock]);
+
+    useCoursePolling(course as any, refreshCourse, {enabled: processingLock, intervalMs: 3000});
 
     const sectionsSorted = useMemo<SectionLike[]>(() => {
         const raw = [...(course.sections ?? [])];
@@ -166,15 +178,13 @@ export default function CourseSectionsEditor({
     const viewerVideo = selected?.chapter?.video ?? null;
 
     function handleAddSection() {
-        if (isReadOnly) {
+        if (structureLocked) {
             return;
         }
 
         setCourse((prev) => {
             const existing = prev.sections ?? [];
-
-            const nextPosition =
-                existing.length === 0 ? 1 : Math.max(...existing.map((s) => s.position ?? 0)) + 1;
+            const nextPosition = existing.length === 0 ? 1 : Math.max(...existing.map((s) => s.position ?? 0)) + 1;
 
             const newSection: SectionLike = {
                 id: createClientKey(),
@@ -191,7 +201,7 @@ export default function CourseSectionsEditor({
     }
 
     function handleAddChapter(sectionId: string) {
-        if (isReadOnly) {
+        if (structureLocked) {
             return;
         }
 
@@ -204,8 +214,7 @@ export default function CourseSectionsEditor({
                 }
 
                 const chapters = s.chapters ?? [];
-                const nextPosition =
-                    chapters.length === 0 ? 1 : Math.max(...chapters.map((c) => c.position ?? 0)) + 1;
+                const nextPosition = chapters.length === 0 ? 1 : Math.max(...chapters.map((c) => c.position ?? 0)) + 1;
 
                 const newChapter: ChapterLike = {
                     id: newChapterId,
@@ -230,7 +239,7 @@ export default function CourseSectionsEditor({
     }
 
     function handleRenameSection(sectionId: string, nextTitle: string) {
-        if (isReadOnly) {
+        if (structureLocked) {
             return;
         }
 
@@ -258,7 +267,7 @@ export default function CourseSectionsEditor({
     }
 
     function handleDeleteSection(sectionId: string) {
-        if (isReadOnly) {
+        if (structureLocked) {
             return;
         }
 
@@ -284,7 +293,7 @@ export default function CourseSectionsEditor({
     }
 
     function handleRenameChapter(chapterId: string, nextTitle: string) {
-        if (isReadOnly) {
+        if (structureLocked) {
             return;
         }
 
@@ -315,7 +324,7 @@ export default function CourseSectionsEditor({
     }
 
     function handleDeleteChapter(chapterId: string) {
-        if (isReadOnly) {
+        if (structureLocked) {
             return;
         }
 
@@ -350,7 +359,9 @@ export default function CourseSectionsEditor({
                 <div className="rounded-lg border bg-muted/10 p-4 text-sm text-muted-foreground">
                     Ce chapitre n’est pas encore enregistré.
                     <br/>
-                    Cliquez sur <strong>Save course</strong> pour activer l’upload vidéo.
+                    L’upload vidéo est désactivé tant que le cours n’est pas sauvegardé.
+                    <br/>
+                    Cliquez sur <strong>Save course</strong> pour continuer.
                 </div>
             );
         }
@@ -368,7 +379,6 @@ export default function CourseSectionsEditor({
 
     return (
         <div className="space-y-6">
-            {/* Header */}
             <div className="space-y-2">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                     <div>
@@ -378,9 +388,17 @@ export default function CourseSectionsEditor({
                             <strong>Save course</strong>.
                         </p>
 
-                        {isReadOnly ? (
+                        {isWaitingValidation ? (
                             <p className="mt-1 text-sm text-muted-foreground">
                                 Ce cours est <strong>en attente de validation</strong> : l’édition est désactivée.
+                            </p>
+                        ) : null}
+
+                        {!isWaitingValidation && processingLock ? (
+                            <p className="mt-1 text-sm text-muted-foreground">
+                                Une vidéo est en <strong>PROCESSING</strong> : la structure du cours est temporairement
+                                bloquée, mais vous pouvez continuer à uploader d’autres vidéos sur des chapitres déjà
+                                enregistrés.
                             </p>
                         ) : null}
                     </div>
@@ -400,11 +418,8 @@ export default function CourseSectionsEditor({
                             onClick={() => setIsSidebarOpen((v) => !v)}
                             aria-label={isSidebarOpen ? "Fermer la sidebar" : "Ouvrir la sidebar"}
                         >
-                            {isSidebarOpen ? (
-                                <PanelRightClose className="h-4 w-4"/>
-                            ) : (
-                                <PanelRightOpen className="h-4 w-4"/>
-                            )}
+                            {isSidebarOpen ? <PanelRightClose className="h-4 w-4"/> :
+                                <PanelRightOpen className="h-4 w-4"/>}
                         </Button>
                     </div>
                 </div>
@@ -418,12 +433,7 @@ export default function CourseSectionsEditor({
                 </div>
             ) : (
                 <div
-                    className={cn(
-                        "grid gap-6",
-                        isSidebarOpen ? "grid-cols-1 lg:grid-cols-[1fr_380px]" : "grid-cols-1"
-                    )}
-                >
-                    {/* MAIN VIEWER */}
+                    className={cn("grid gap-6", isSidebarOpen ? "grid-cols-1 lg:grid-cols-[1fr_380px]" : "grid-cols-1")}>
                     <Card className="border-muted/60">
                         <CardHeader className="pb-3">
                             <CardTitle className="text-base">Viewer</CardTitle>
@@ -432,24 +442,22 @@ export default function CourseSectionsEditor({
                         <CardContent>{renderViewer()}</CardContent>
                     </Card>
 
-                    {/* RIGHT SIDEBAR */}
                     {isSidebarOpen ? (
                         <CourseStructureSidebar
                             sections={sectionsSorted}
                             selectedChapterId={selectedChapterId}
-                            readOnly={isReadOnly}
                             onSelectChapter={setSelectedChapterId}
-                            onMoveSection={(sectionId, direction) => {
-                                if (isReadOnly) {
+                            onMoveSection={(sectionIndex, direction) => {
+                                if (structureLocked) {
                                     return;
                                 }
-                                moveSection(sectionId, direction);
+                                moveSection(sectionIndex, direction);
                             }}
-                            onMoveChapter={(sectionId, chapterId, direction) => {
-                                if (isReadOnly) {
+                            onMoveChapter={(sectionIndex, chapterIndex, direction) => {
+                                if (structureLocked) {
                                     return;
                                 }
-                                moveChapter(sectionId, chapterId, direction);
+                                moveChapter(sectionIndex, chapterIndex, direction);
                             }}
                             onRenameSection={handleRenameSection}
                             onDeleteSection={handleDeleteSection}
@@ -457,6 +465,7 @@ export default function CourseSectionsEditor({
                             onDeleteChapter={handleDeleteChapter}
                             onAddSection={handleAddSection}
                             onAddChapter={handleAddChapter}
+                            readOnly={structureLocked}
                         />
                     ) : null}
                 </div>

@@ -2,9 +2,9 @@ name: Frontend CI
 
 on:
   push:
-    branches: [ "dev", "main" ]
+    branches: [ "dev", "master" ]
   pull_request:
-    branches: [ "dev", "main" ]
+    branches: [ "dev", "master" ]
 
 permissions:
   contents: read
@@ -13,6 +13,16 @@ permissions:
 concurrency:
   group: frontend-ci-${{ github.ref }}
   cancel-in-progress: true
+
+# Vite variables are NOT secrets (repo variables). Only Sonar stays in secrets.
+# In CI, we map VITE_API_URL_TEST -> VITE_API_URL because the app reads VITE_API_URL.
+env:
+  VITE_API_URL_TEST: ${{ vars.VITE_API_URL_TEST }}
+  VITE_API_URL: ${{ vars.VITE_API_URL_TEST }}
+
+  VITE_KEYCLOAK_URL: ${{ vars.VITE_KEYCLOAK_URL }}
+  VITE_KEYCLOAK_REALM: ${{ vars.VITE_KEYCLOAK_REALM }}
+  VITE_KEYCLOAK_CLIENT_ID: ${{ vars.VITE_KEYCLOAK_CLIENT_ID }}
 
 jobs:
   build:
@@ -79,67 +89,67 @@ jobs:
             coverage
             coverage/lcov.info
 
-  # TODO: Temporarily disabled - Cypress tests need to be fixed
-  # cypress:
-  #   name: Cypress E2E (headless)
-  #   runs-on: ubuntu-latest
-  #   needs: build
+  cypress:
+    name: Cypress E2E (headless)
+    runs-on: ubuntu-latest
+    needs: build
 
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v4
-  #       with:
-  #         fetch-depth: 0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-  #     - name: Setup Node
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: "20"
-  #         cache: "npm"
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
 
-  #     - name: Install
-  #       run: npm ci
+      - name: Install
+        run: npm ci
 
-  #     - name: Download dist artifact
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         name: frontend-dist
-  #         path: dist
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist
 
-  #     - name: Chrome version
-  #       run: google-chrome --version
+      - name: Chrome version
+        run: google-chrome --version
 
-  #     - name: Cypress E2E (headless)
-  #       uses: cypress-io/github-action@v6
-  #       env:
-  #         CYPRESS_BASE_URL: http://localhost:4173
-  #         CYPRESS_CI: "true"
-  #       with:
-  #         start: npm run preview -- --host 0.0.0.0 --port 4173 --strictPort
-  #         wait-on: http://localhost:4173
-  #         wait-on-timeout: 180
-  #         browser: chrome
-  #         install: false
+      - name: Cypress E2E (headless)
+        uses: cypress-io/github-action@v6
+        env:
+          CYPRESS_BASE_URL: http://localhost:4173
+          CYPRESS_CI: "true"
+        with:
+          start: npm run preview -- --host 0.0.0.0 --port 4173 --strictPort
+          wait-on: http://localhost:4173
+          wait-on-timeout: 180
+          browser: chrome
+          install: false
 
-  #     - name: Upload Cypress screenshots (on failure)
-  #       if: failure()
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: cypress-screenshots
-  #         if-no-files-found: ignore
-  #         path: cypress/screenshots
+      - name: Upload Cypress screenshots (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-screenshots
+          if-no-files-found: ignore
+          path: cypress/screenshots
 
-  #     - name: Upload Cypress videos (on failure)
-  #       if: failure()
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: cypress-videos
-  #         if-no-files-found: ignore
-  #         path: cypress/videos
+      - name: Upload Cypress videos (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-videos
+          if-no-files-found: ignore
+          path: cypress/videos
+
   sonar:
     name: Sonar (Frontend)
     runs-on: ubuntu-latest
-    needs: [ unit ]  # cypress temporarily disabled
+    needs: [ unit, cypress ]
 
     steps:
       - name: Checkout

@@ -17,20 +17,21 @@ describe('AuthContext Integration Tests', () => {
     beforeEach(() => {
         vi.clearAllMocks();
 
-        // Mock window.location
+        // Mock globalThis.location.assign
         originalLocation = window.location;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        delete (window as any).location;
-        window.location = {
-            href: '',
-        } as Location;
+        (globalThis as any).location = {
+            ...window.location,
+            assign: vi.fn(),
+        };
 
         // Set VITE_API_URL
         vi.stubEnv('VITE_API_URL', 'http://localhost:8080/api');
     });
 
     afterEach(() => {
-        window.location = originalLocation;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (globalThis as any).location = originalLocation;
         vi.unstubAllEnvs();
     });
 
@@ -498,7 +499,7 @@ describe('AuthContext Integration Tests', () => {
             const button = screen.getByRole('button', {name: 'Login'});
             button.click();
 
-            expect(window.location.href).toBe('http://localhost:8080/api/auth/login');
+            expect(globalThis.location.assign).toHaveBeenCalledWith('http://localhost:8080/api/auth/login');
         });
 
         it('should provide logout function that redirects to API_ROOT/auth/logout', () => {
@@ -516,7 +517,7 @@ describe('AuthContext Integration Tests', () => {
             const button = screen.getByRole('button', {name: 'Logout'});
             button.click();
 
-            expect(window.location.href).toBe('http://localhost:8080/api/auth/logout');
+            expect(globalThis.location.assign).toHaveBeenCalledWith('http://localhost:8080/api/auth/logout');
         });
 
         it('should throw error when useAuth is called outside AuthProvider', () => {

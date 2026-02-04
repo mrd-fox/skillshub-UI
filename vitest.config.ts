@@ -1,7 +1,8 @@
 import {defineConfig} from 'vitest/config';
 import react from '@vitejs/plugin-react';
-import * as path from 'path';
+import * as path from 'node:path';
 
+// Vitest automatically loads .env.test when running in test mode
 export default defineConfig({
     plugins: [react()],
     test: {

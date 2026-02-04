@@ -6,23 +6,22 @@ export type ApiError = {
     message: string;
 };
 
-// Guard global pour éviter spam toast + boucles de redirection
+// Global guard to prevent toast spam + redirect loops
 let sessionExpiredHandled = false;
 
 const baseURL = import.meta.env.VITE_API_URL;
 
 if (!baseURL || typeof baseURL !== "string") {
-    // Fail fast : mieux vaut casser au démarrage que des comportements bizarres
-    // eslint-disable-next-line no-console
-    console.error("❌ VITE_API_URL is missing or invalid");
+    // Fail-fast: environment misconfiguration must not lead to silent, unstable runtime behavior
+    throw new Error("VITE_API_URL is required and must be a valid string (example: http://localhost:8080/api).");
 }
 
 const api = axios.create({
     baseURL,
-    withCredentials: true, // cookies HttpOnly gérés par Gateway
+    withCredentials: true, // HttpOnly cookies managed by Gateway
 });
 
-// Mapping unique HTTP → message UX
+// Single mapping HTTP status -> UX message
 function mapStatusToMessage(status: number): string {
     if (status === 401) {
         return "Votre session a expiré. Veuillez vous reconnecter.";
@@ -35,14 +34,15 @@ function mapStatusToMessage(status: number): string {
     }
 }
 
-function redirectToLogin(): void {
-    if (!baseURL || typeof baseURL !== "string") {
-        return;
-    }
+function buildGatewayUrl(path: string): string {
+    // Ensure stable URL resolution even if baseURL ends with "/api" or "/api/"
+    const normalizedBase = baseURL.endsWith("/") ? baseURL : `${baseURL}/`;
+    return new URL(path.replace(/^\//, ""), normalizedBase).toString();
+}
 
-    // baseURL attendu = ".../api"
-    // window.location.href = `${baseURL}/auth/login`;
-    window.location.assign(`${baseURL}/auth/login`)
+function redirectToLogin(): void {
+    // Gateway endpoint: GET {baseURL}/auth/login
+    globalThis.location.assign(buildGatewayUrl("auth/login"));
 }
 
 api.interceptors.response.use(
@@ -62,7 +62,6 @@ api.interceptors.response.use(
                 sessionExpiredHandled = true;
 
                 toast.warning(message);
-
                 redirectToLogin();
             }
         }
@@ -72,7 +71,7 @@ api.interceptors.response.use(
             message,
         };
 
-        // ⚠️ On ne propage JAMAIS le message backend
+        // Never propagate backend error details to the UI layer
         return Promise.reject(apiError);
     }
 );

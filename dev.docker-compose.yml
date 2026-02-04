@@ -1,16 +1,13 @@
-networks:
-  skillshub-net:
-    external: true
 services:
   skillshub-front-dev:
+    container_name: skillshub-front-dev
     build:
       context: .
       dockerfile: dev.Dockerfile
 
-    container_name: skillshub-front-dev
-
     working_dir: /app
 
+    # Source code mounted, node_modules isolated in container volume
     volumes:
       - .:/app
       - /app/node_modules
@@ -21,7 +18,12 @@ services:
     env_file:
       - ./env/dev/docker-gateway.env
 
-    command: [ "npm", "run", "dev" ]
+    # Deterministic install + start dev server
+    command: [ "sh", "-c", "npm ci && npm run dev -- --host 0.0.0.0 --port 5173" ]
 
     networks:
       - skillshub-net
+
+networks:
+  skillshub-net:
+    external: true

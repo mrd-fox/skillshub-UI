@@ -20,6 +20,17 @@ export default defineConfig({
             // Force Cypress TypeScript compiler to use the Cypress tsconfig
             process.env.TS_NODE_PROJECT = "cypress/tsconfig.json";
 
+            // Set VITE_API_URL for the Node process (used by Cypress internally)
+            // NOTE: This does NOT inject into the Vite app running in the browser
+            // Vite must be started with VITE_API_URL defined separately
+            if (!process.env.VITE_API_URL) {
+                process.env.VITE_API_URL = "http://localhost:8080/api";
+            }
+
+            // Make VITE_API_URL available to Cypress tests via Cypress.env()
+            config.env = config.env || {};
+            config.env.VITE_API_URL = process.env.VITE_API_URL;
+
             // Stabilize Chrome on Linux CI runners (common flakiness fix)
             on("before:browser:launch", (browser, launchOptions) => {
                 if (browser.family === "chromium" && process.env.CYPRESS_CI === "true") {

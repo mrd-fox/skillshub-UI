@@ -22,17 +22,17 @@ describe('axios API interceptor', () => {
         // Reset all mocks before each test
         vi.clearAllMocks();
 
-        // Mock window.location
+        // Mock globalThis.location.assign
         originalLocation = window.location;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        delete (window as any).location;
         const mockLocation = {
+            ...window.location,
             href: '',
             assign: vi.fn((url: string) => {
                 mockLocation.href = url;
             }),
         };
-        window.location = mockLocation as unknown as Location;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (globalThis as any).location = mockLocation;
 
         // Create a mock axios instance
         mockAxiosInstance = {
@@ -53,8 +53,9 @@ describe('axios API interceptor', () => {
     });
 
     afterEach(() => {
-        // Restore window.location
-        window.location = originalLocation;
+        // Restore globalThis.location
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (globalThis as any).location = originalLocation;
     });
 
     describe('401 Unauthorized errors', () => {
@@ -179,10 +180,9 @@ describe('axios API interceptor', () => {
                 // Expected to reject
             }
 
-            expect(window.location.href).toBe('http://localhost:8080/api/auth/login');
-
-            // Reset href to test it doesn't change again
-            window.location.href = '';
+            // Verify globalThis.location.assign was called with the correct URL
+            expect(globalThis.location.assign).toHaveBeenCalledTimes(1);
+            expect(globalThis.location.assign).toHaveBeenCalledWith('http://localhost:8080/api/auth/login');
 
             // Second 401 error
             try {
@@ -191,8 +191,8 @@ describe('axios API interceptor', () => {
                 // Expected to reject
             }
 
-            // Should NOT redirect again
-            expect(window.location.href).toBe('');
+            // Should NOT redirect again (guard anti-spam)
+            expect(globalThis.location.assign).toHaveBeenCalledTimes(1);
 
             vi.unstubAllEnvs();
         });
@@ -460,42 +460,14 @@ describe('axios API interceptor', () => {
             vi.unstubAllEnvs();
         });
 
-        it('should log error when VITE_API_URL is missing', async () => {
-            const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {
-            });
-
+        it('should throw error when VITE_API_URL is missing (fail-fast)', async () => {
             vi.stubEnv('VITE_API_URL', undefined);
             vi.resetModules();
-            await import('./axios');
 
-            expect(consoleErrorSpy).toHaveBeenCalledWith('❌ VITE_API_URL is missing or invalid');
-
-            consoleErrorSpy.mockRestore();
-            vi.unstubAllEnvs();
-        });
-
-        it('should not redirect when VITE_API_URL is missing on 401', async () => {
-            vi.stubEnv('VITE_API_URL', undefined);
-            vi.resetModules();
-            await import('./axios');
-
-            const axiosError = {
-                response: {
-                    status: 401,
-                },
-            };
-
-            const createCall = vi.mocked(axios.create).mock.results[0];
-            const useCall = createCall.value.interceptors.response.use.mock.calls[0];
-            const errorHandler = useCall[1];
-
-            try {
-                await errorHandler(axiosError);
-            } catch {
-                // Expected to reject
-            }
-
-            expect(window.location.href).toBe('');
+            // Importing the module should throw an error
+            await expect(async () => {
+                await import('./axios');
+            }).rejects.toThrow('VITE_API_URL is required and must be a valid string');
 
             vi.unstubAllEnvs();
         });

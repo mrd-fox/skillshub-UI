@@ -14,8 +14,6 @@ concurrency:
   group: frontend-ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Vite variables are NOT secrets (repo variables). Only Sonar stays in secrets.
-# In CI, we map VITE_API_URL_TEST -> VITE_API_URL because the app reads VITE_API_URL.
 env:
   VITE_API_URL_TEST: ${{ vars.VITE_API_URL_TEST }}
   VITE_API_URL: ${{ vars.VITE_API_URL_TEST }}
@@ -24,8 +22,7 @@ env:
   VITE_KEYCLOAK_REALM: ${{ vars.VITE_KEYCLOAK_REALM }}
   VITE_KEYCLOAK_CLIENT_ID: ${{ vars.VITE_KEYCLOAK_CLIENT_ID }}
 
-  # Prevent Cypress binary download during npm ci (fixes flaky CI network issues)
-  CYPRESS_INSTALL_BINARY: '0'
+  CYPRESS_INSTALL_BINARY: "0"
 
 jobs:
   build:
@@ -104,7 +101,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      # setup-node still useful for npm cache + consistent Node 20 tooling
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -126,11 +122,25 @@ jobs:
       - name: Wait preview
         run: npx wait-on http://localhost:4173 -t 180000
 
-      - name: Cypress run (headless)
-        run: npx cypress run --browser chrome
+      # Generate Sonar Generic Test Execution report from Cypress
+      - name: Prepare Cypress Sonar report directory
+        run: mkdir -p reports/sonar
+
+      - name: Cypress run (headless) + Sonar report
+        run: |
+          npx cypress run --browser chrome \
+            --reporter mocha-sonarqube-reporter \
+            --reporter-options output=reports/sonar/sonar-test-report.xml
         env:
           CYPRESS_BASE_URL: http://localhost:4173
-          CYPRESS_CI: 'true'
+          CYPRESS_CI: "true"
+
+      - name: Upload Cypress Sonar report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-sonar-report
+          if-no-files-found: error
+          path: reports/sonar/sonar-test-report.xml
 
       - name: Upload Cypress screenshots (on failure)
         if: failure()
@@ -164,6 +174,12 @@ jobs:
         with:
           name: frontend-coverage
           path: .
+
+      - name: Download Cypress Sonar report artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cypress-sonar-report
+          path: reports/sonar
 
       - name: SonarQube Cloud Scan
         uses: SonarSource/sonarqube-scan-action@v5

@@ -1,5 +1,8 @@
 import {defineConfig} from "cypress";
-import codeCoverageTask from "@cypress/code-coverage/task";
+import {createRequire} from "node:module";
+
+const require = createRequire(import.meta.url);
+const codeCoverageTask = require("@cypress/code-coverage/task");
 
 export default defineConfig({
     e2e: {
@@ -18,24 +21,17 @@ export default defineConfig({
         responseTimeout: 10000,
 
         setupNodeEvents(on, config) {
-            // Register code coverage tasks (writes .nyc_output)
             codeCoverageTask(on, config);
 
-            // Force Cypress TypeScript compiler to use the Cypress tsconfig
             process.env.TS_NODE_PROJECT = "cypress/tsconfig.json";
 
-            // Set VITE_API_URL for the Node process (used by Cypress internally)
-            // NOTE: This does NOT inject into the Vite app running in the browser
-            // Vite must be started with VITE_API_URL defined separately
             if (!process.env.VITE_API_URL) {
                 process.env.VITE_API_URL = "http://localhost:8080/api";
             }
 
-            // Make VITE_API_URL available to Cypress tests via Cypress.env()
             config.env = config.env || {};
             config.env.VITE_API_URL = process.env.VITE_API_URL;
 
-            // Stabilize Chrome on Linux CI runners (common flakiness fix)
             on("before:browser:launch", (browser, launchOptions) => {
                 if (browser.family === "chromium" && process.env.CYPRESS_CI === "true") {
                     launchOptions.args.push("--no-sandbox");

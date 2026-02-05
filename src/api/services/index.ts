@@ -13,4 +13,4 @@ export {courseService} from "./courseService";
 export {videoService} from "./videoService";
 
 // Re-export types for convenience
-export type {InitVideoParams, ConfirmVideoParams, PublishVideoParams} from "./videoService";
+export type {InitVideoParams, ConfirmVideoParams, PublishVideoParams, DeleteVideoParams} from "./videoService";

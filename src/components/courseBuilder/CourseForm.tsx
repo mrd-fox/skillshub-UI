@@ -1,5 +1,5 @@
 // src/components/courseBuilder/CreateCourseForm.tsx
-import api from "@/api/axios.ts";
+import {courseService} from "@/api/services";
 import {useState} from "react";
 import {z} from "zod";
 import {Button} from "@/components/ui/button";
@@ -58,8 +58,7 @@ export default function CreateCourseForm({sections}: { sections: any[] }) {
         }
 
         try {
-            const res = await api.post("/course", payload);
-            const createdCourse = res.data;
+            const createdCourse = await courseService.createCourse(payload);
             toast.success("Cours créé avec succès !");
             navigate(`/dashboard/tutor/course-builder/${createdCourse.id}`, {
                 state: {course: createdCourse},

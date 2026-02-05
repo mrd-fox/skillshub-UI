@@ -1,4 +1,5 @@
 import api from "@/api/axios.ts";
+import {API_ENDPOINTS} from "@/api/endpoints";
 import {InitVideoResponse, VideoResponse} from "@/types/video.ts";
 
 
@@ -19,18 +20,11 @@ type PublishVideoParams = {
     videoId: string;
 };
 
-function buildVideoBasePath(courseId: string, sectionId: string, chapterId: string): string {
-    return `/course/${courseId}/sections/${sectionId}/chapters/${chapterId}/video`;
-}
-
 /**
  * INIT
- * POST /api/course/{courseId}/sections/{sectionId}/chapters/{chapterId}/video/init
+ * POST /course/{courseId}/sections/{sectionId}/chapters/{chapterId}/video/init
  * Body: { sizeBytes }
  * Response: InitVideoResponse
- *
- * NOTE:
- * api instance already includes "/api" prefix, so we must NOT add "/api" here.
  */
 export async function initVideo(params: InitVideoParams): Promise<InitVideoResponse> {
     const {courseId, sectionId, chapterId, sizeBytes} = params;
@@ -43,15 +37,15 @@ export async function initVideo(params: InitVideoParams): Promise<InitVideoRespo
         throw new Error("initVideo: sizeBytes must be a positive number.");
     }
 
-    const basePath = buildVideoBasePath(courseId, sectionId, chapterId);
-    const res = await api.post<InitVideoResponse>(`${basePath}/init`, {sizeBytes});
+    const endpoint = API_ENDPOINTS.VIDEOS.INIT(courseId, sectionId, chapterId);
+    const res = await api.post<InitVideoResponse>(endpoint, {sizeBytes});
 
     return res.data;
 }
 
 /**
  * CONFIRM
- * POST /api/course/{courseId}/sections/{sectionId}/chapters/{chapterId}/video/confirm
+ * POST /course/{courseId}/sections/{sectionId}/chapters/{chapterId}/video/confirm
  * Body: {}
  * Response: VideoResponse (status=PROCESSING)
  *
@@ -64,10 +58,10 @@ export async function confirmVideo(params: ConfirmVideoParams): Promise<VideoRes
         throw new Error("confirmVideo: missing path parameters.");
     }
 
-    const basePath = buildVideoBasePath(courseId, sectionId, chapterId);
+    const endpoint = API_ENDPOINTS.VIDEOS.CONFIRM(courseId, sectionId, chapterId);
 
     // Send an empty JSON body to keep a stable contract (Axios + CORS + controller signature).
-    const res = await api.post<VideoResponse>(`${basePath}/confirm`, {});
+    const res = await api.post<VideoResponse>(endpoint, {});
 
     return res.data;
 }
@@ -83,6 +77,7 @@ export async function publishVideo(params: PublishVideoParams): Promise<VideoRes
         throw new Error("publishVideo: videoId is required.");
     }
 
-    const res = await api.post<VideoResponse>(`/videos/${videoId}/publish`);
+    const endpoint = API_ENDPOINTS.VIDEOS.PUBLISH(videoId);
+    const res = await api.post<VideoResponse>(endpoint);
     return res.data;
 }

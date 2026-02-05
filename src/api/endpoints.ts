@@ -90,6 +90,12 @@ export const API_ENDPOINTS = {
          * DELETE /course/:courseId
          */
         DELETE: (courseId: string) => `/course/${courseId}`,
+
+        /**
+         * Publish course for validation
+         * POST /course/:courseId/publish
+         */
+        PUBLISH: (courseId: string) => `/course/${courseId}/publish`,
     },
 
     // ============================================

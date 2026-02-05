@@ -24,6 +24,12 @@ export type PublishVideoParams = {
     videoId: string;
 };
 
+export type DeleteVideoParams = {
+    courseId: string;
+    sectionId: string;
+    chapterId: string;
+};
+
 export const videoService = {
     /**
      * Initialize video upload
@@ -100,5 +106,22 @@ export const videoService = {
         );
 
         return res.data;
+    },
+
+    /**
+     * Delete video from chapter
+     * DELETE /course/:courseId/sections/:sectionId/chapters/:chapterId/video
+     *
+     * @param params Delete parameters
+     * @throws {ApiError} If validation fails or user unauthorized
+     */
+    async deleteVideo(params: DeleteVideoParams): Promise<void> {
+        const {courseId, sectionId, chapterId} = params;
+
+        if (!courseId || !sectionId || !chapterId) {
+            throw new Error("deleteVideo: missing path parameters.");
+        }
+
+        await api.delete(API_ENDPOINTS.VIDEOS.STATUS(courseId, sectionId, chapterId));
     },
 };

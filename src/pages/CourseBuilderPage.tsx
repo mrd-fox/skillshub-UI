@@ -1,6 +1,6 @@
 import {useEffect, useState} from "react";
 import {useLocation, useParams} from "react-router-dom";
-import api from "@/api/axios.ts";
+import {courseService} from "@/api/services";
 import {Input} from "@/components/ui/input";
 import {Textarea} from "@/components/ui/textarea";
 import {Button} from "@/components/ui/button";
@@ -43,8 +43,8 @@ export default function CourseBuilderPage() {
         if (initialCourse) return; // déjà en mémoire
         const fetchCourse = async () => {
             try {
-                const res = await api.get(`/course/${courseId}`);
-                setCourse(res.data);
+                const data = await courseService.getCourseById(courseId!);
+                setCourse(data as any);
             } catch (err) {
                 console.error("Erreur chargement cours:", err);
                 toast.error("Impossible de charger le cours.");
@@ -62,8 +62,8 @@ export default function CourseBuilderPage() {
     const handleSave = async () => {
         setSaving(true);
         try {
-            const res = await api.put(`/course/${course.id}`, course);
-            setCourse(res.data); // synchro avec backend
+            const updated = await courseService.updateCourse(course.id!, course as any);
+            setCourse(updated as any); // synchro avec backend
             toast.success("Brouillon enregistré avec succès !");
         } catch (err) {
             console.error("Erreur sauvegarde:", err);

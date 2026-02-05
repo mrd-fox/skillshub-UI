@@ -4,7 +4,13 @@
 
 import {VideoResponse} from "@/types/video";
 
-export type CourseStatus = "DRAFT" | "REVISION" | "PUBLISHED" | "REJECTED";
+export type CourseStatus =
+    | "DRAFT"
+    | "REVISION"
+    | "WAITING_VALIDATION"
+    | "VALIDATED"
+    | "PUBLISHED"
+    | "REJECTED";
 
 export type Chapter = {
     id: string;

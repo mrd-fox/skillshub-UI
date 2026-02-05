@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useRef, useState} from "react";
 import * as tus from "tus-js-client";
 
-import api from "@/api/axios.ts";
+import {videoService} from "@/api/services";
 import {confirmVideo, initVideo} from "@/api/videoApi";
 import {InitVideoResponse} from "@/types/video.ts";
 
@@ -40,10 +40,6 @@ type Props = {
     className?: string;
 };
 
-function buildVideoBasePath(courseId: string, sectionId: string, chapterId: string): string {
-    // NOTE: api instance already includes "/api" prefix.
-    return `/course/${courseId}/sections/${sectionId}/chapters/${chapterId}/video`;
-}
 
 function formatStatus(status?: VideoStatus | null): VideoStatus {
     if (!status) {
@@ -292,8 +288,7 @@ export default function ChapterVideoPanel(props: Props) {
         setMessage("Suppression vidéo...");
 
         try {
-            const basePath = buildVideoBasePath(courseId, sectionId, chapterId);
-            await api.delete(`${basePath}`);
+            await videoService.deleteVideo({courseId, sectionId, chapterId});
 
             setMessage("Vidéo supprimée.");
             setPreviewEnabled(false);

@@ -73,4 +73,20 @@ export const courseService = {
     async deleteCourse(courseId: string): Promise<void> {
         await api.delete(API_ENDPOINTS.COURSES.DELETE(courseId));
     },
+
+    /**
+     * Publish a course for validation
+     * POST /course/:courseId/publish
+     *
+     * @param courseId Course ID
+     * @returns Updated course with new status
+     * @throws {ApiError} If course not found, validation fails, or user unauthorized
+     */
+    async publishCourse(courseId: string): Promise<Course> {
+        const res = await api.post<Course>(
+            API_ENDPOINTS.COURSES.PUBLISH(courseId),
+            {}
+        );
+        return res.data;
+    },
 };

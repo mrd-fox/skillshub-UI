@@ -1,6 +1,7 @@
 import {createContext, useCallback, useContext, useEffect, useMemo, useRef, useState} from "react";
 import {NavLink, Outlet, useLocation, useParams} from "react-router-dom";
-import api from "@/api/axios.ts";
+import {courseService} from "@/api/services";
+import {CourseStatus} from "@/api/types/course";
 import {Loader2, Save, Send} from "lucide-react";
 import {VideoResponse} from "@/types/video.ts";
 import {Button} from "@/components/ui/button.tsx";
@@ -31,18 +32,11 @@ type SectionResponse = {
     updatedAt?: string | null;
 };
 
-type CourseStatusEnum =
-    | "DRAFT"
-    | "WAITING_VALIDATION"
-    | "VALIDATED"
-    | "REJECTED"
-    | "PUBLISHED";
-
 export type CourseResponse = {
     id: string;
     title: string;
     description: string;
-    status: CourseStatusEnum;
+    status: CourseStatus;
     price?: number | null;
     sections: SectionResponse[];
     createdAt?: string | null;
@@ -128,7 +122,7 @@ function hasProcessingVideo(course: CourseResponse | null): boolean {
     return false;
 }
 
-function getCourseStatusLabel(status: CourseStatusEnum): string {
+function getCourseStatusLabel(status: CourseStatus): string {
     if (status === "DRAFT") {
         return "Brouillon";
     }
@@ -313,8 +307,8 @@ export default function CourseBuilderLayout() {
         }
 
         try {
-            const res = await api.get(`/course/${resolvedCourseId}`);
-            setCourse(res.data as CourseResponse);
+            const course = await courseService.getCourseById(resolvedCourseId);
+            setCourse(course as CourseResponse);
         } finally {
             hasFetchedOnceRef.current = true;
             setLoading(false);
@@ -397,11 +391,9 @@ export default function CourseBuilderLayout() {
         setSaving(true);
         try {
             const payload = mapPartialToUpdateRequest(partial);
-            const res = await api.put(`/course/${resolvedCourseId}`, payload);
-
-            const updated = res.data as CourseResponse;
-            setCourse(updated);
-            return updated;
+            const updated = await courseService.updateCourse(resolvedCourseId, payload);
+            setCourse(updated as CourseResponse);
+            return updated as CourseResponse;
         } finally {
             setSaving(false);
         }
@@ -456,12 +448,11 @@ export default function CourseBuilderLayout() {
 
         setPublishing(true);
         try {
-            const res = await api.post(`/course/${resolvedCourseId}/publish`, {});
-            const updated = res.data as CourseResponse;
-            setCourse(updated);
+            const updated = await courseService.publishCourse(resolvedCourseId);
+            setCourse(updated as CourseResponse);
 
             if (updated.status === "WAITING_VALIDATION") {
-                toast.success("Cours soumis à validation. Édition bloquée jusqu’à décision.");
+                toast.success("Cours soumis à validation. Édition bloquée jusqu'à décision.");
             } else {
                 toast.success("Cours soumis.");
             }

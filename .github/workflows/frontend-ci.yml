@@ -23,7 +23,7 @@ env:
   VITE_KEYCLOAK_REALM: ${{ vars.VITE_KEYCLOAK_REALM }}
   VITE_KEYCLOAK_CLIENT_ID: ${{ vars.VITE_KEYCLOAK_CLIENT_ID }}
 
-  # Avoid Cypress binary download during npm ci in CI (we use cypress/included image)
+  # Avoid Cypress binary download during npm ci (we use cypress/included image)
   CYPRESS_INSTALL_BINARY: "0"
 
 jobs:
@@ -103,7 +103,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      # setup-node still useful for npm cache + consistent Node 20 tooling
+      # setup-node still useful for npm cache + consistent tooling
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -141,8 +141,8 @@ jobs:
           CYPRESS_BASE_URL: http://localhost:4173
           CYPRESS_CI: "true"
           VITE_API_URL: ${{ vars.VITE_API_URL_TEST }}
+          CYPRESS_COVERAGE: "true"
 
-      # Diagnostics: show NYC output (helps when CI doesn't generate it)
       - name: Debug NYC output
         if: always()
         run: |
@@ -158,13 +158,12 @@ jobs:
           if-no-files-found: error
           path: reports/sonar/sonar-test-report.xml
 
-      # Upload NYC output (do not fail the whole job if missing; Sonar job will handle absence)
       - name: Upload Cypress NYC output artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: cypress-nyc-output
-          if-no-files-found: warn
+          if-no-files-found: error
           path: .nyc_output
 
       - name: Upload Cypress screenshots (on failure)
@@ -209,7 +208,6 @@ jobs:
           name: frontend-coverage
           path: .
 
-      # If Cypress coverage is missing, the merge script should still work (or you should make it tolerant)
       - name: Download Cypress NYC output artifact
         uses: actions/download-artifact@v4
         with:

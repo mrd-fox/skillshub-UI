@@ -15,7 +15,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Vite variables (repo vars). The app reads VITE_API_URL.
   VITE_API_URL_TEST: ${{ vars.VITE_API_URL_TEST }}
   VITE_API_URL: ${{ vars.VITE_API_URL_TEST }}
 
@@ -23,7 +22,6 @@ env:
   VITE_KEYCLOAK_REALM: ${{ vars.VITE_KEYCLOAK_REALM }}
   VITE_KEYCLOAK_CLIENT_ID: ${{ vars.VITE_KEYCLOAK_CLIENT_ID }}
 
-  # Avoid Cypress binary download during npm ci (we use cypress/included image)
   CYPRESS_INSTALL_BINARY: "0"
 
 jobs:
@@ -86,9 +84,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: frontend-coverage
-          if-no-files-found: warn
+          if-no-files-found: error
           path: |
-            coverage
             coverage/lcov.info
 
   cypress:
@@ -103,7 +100,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      # setup-node still useful for npm cache + consistent tooling
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -113,8 +109,6 @@ jobs:
       - name: Install
         run: npm ci
 
-      # IMPORTANT: instrumented dist for Cypress coverage
-      # vite-plugin-istanbul expects CYPRESS_COVERAGE=true (with cypress: true + requireEnv: true)
       - name: Build (instrumented for Cypress coverage)
         run: npm run build
         env:
@@ -146,9 +140,11 @@ jobs:
       - name: Debug NYC output
         if: always()
         run: |
-          echo "PWD=$(pwd)"
+          echo "***"
+          pwd
           ls -la
           ls -la .nyc_output || true
+          ls -la .nyc_output/out.json || true
 
       - name: Upload Cypress Sonar report artifact
         if: always()
@@ -157,15 +153,6 @@ jobs:
           name: cypress-sonar-report
           if-no-files-found: error
           path: reports/sonar/sonar-test-report.xml
-
-      - name: Debug NYC output
-        if: always()
-        run: |
-          echo "***"
-          pwd
-          ls -la
-          ls -la .nyc_output || true
-          ls -la .nyc_output/out.json || true
 
       - name: Upload Cypress NYC output artifact
         if: always()
@@ -218,6 +205,21 @@ jobs:
           path: .
           merge-multiple: true
 
+      - name: Normalize Vitest LCOV path
+        run: |
+          mkdir -p coverage
+          if [ -f "coverage/lcov.info" ]; then
+            echo "coverage/lcov.info already present"
+            exit 0
+          fi
+          if [ -f "lcov.info" ]; then
+            mv lcov.info coverage/lcov.info
+            echo "Moved ./lcov.info -> coverage/lcov.info"
+            exit 0
+          fi
+          echo "Vitest LCOV not found (expected coverage/lcov.info or ./lcov.info)"
+          exit 1
+
       - name: Download Cypress NYC output artifact
         uses: actions/download-artifact@v4
         with:
@@ -243,6 +245,9 @@ jobs:
           find . -maxdepth 5 -type f -name "lcov.info" -print
           echo "*** NYC ***"
           ls -la .nyc_output || true
+          ls -la .nyc_output/out.json || true
+          echo "*** CYPRESS REPORT ***"
+          ls -la reports/sonar || true
 
       - name: Merge coverage (Vitest + Cypress)
         run: npm run coverage:merge

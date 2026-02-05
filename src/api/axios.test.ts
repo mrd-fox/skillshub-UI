@@ -22,11 +22,12 @@ describe('axios API interceptor', () => {
         // Reset all mocks before each test
         vi.clearAllMocks();
 
-        // Mock globalThis.location.assign
+        // Mock globalThis.location.assign AND pathname
         originalLocation = window.location;
         const mockLocation = {
             ...window.location,
             href: '',
+            pathname: '/dashboard/tutor', // NOT the home page
             assign: vi.fn((url: string) => {
                 mockLocation.href = url;
             }),

@@ -1,5 +1,5 @@
-import {useEffect, useMemo, useState} from "react";
-import api from "@/api/axios.ts";
+import {useEffect, useMemo, useRef, useState} from "react";
+import api, {ApiError} from "@/api/axios.ts";
 import {SkeletonLoader} from "@/components/ui/SkeletonLoader.tsx";
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card.tsx";
 import {
@@ -15,10 +15,8 @@ import {
 type PublicCourseListItem = {
     id: string;
     title: string;
-    // Not available yet -> kept optional for forward compatibility
     author?: string | null;
-    // Price in cents (recommended to return it from /public/courses)
-    price?: number | null;
+    price?: number | null; // cents
 };
 
 type PublicCourseDetailResponse = {
@@ -56,6 +54,30 @@ function sortByPosition<T extends { position: number }>(items: T[]): T[] {
     return [...items].sort((a, b) => a.position - b.position);
 }
 
+function isApiError(e: unknown): e is ApiError {
+    if (!e || typeof e !== "object") {
+        return false;
+    }
+    const candidate = e as { status?: unknown; message?: unknown };
+    return typeof candidate.status === "number" && typeof candidate.message === "string";
+}
+
+function publicCatalogErrorMessage(e: unknown): string {
+    // Public page: never present auth/session semantics to the user
+    if (isApiError(e)) {
+        if (e.status === 401 || e.status === 403) {
+            return "Catalogue indisponible (accès non autorisé).";
+        }
+        return e.message;
+    }
+
+    if (e instanceof Error && typeof e.message === "string" && e.message.trim().length > 0) {
+        return e.message;
+    }
+
+    return "Impossible de charger le catalogue.";
+}
+
 export default function HomePage() {
     const [loading, setLoading] = useState<boolean>(true);
     const [courses, setCourses] = useState<PublicCourseListItem[]>([]);
@@ -67,25 +89,33 @@ export default function HomePage() {
     const [detailError, setDetailError] = useState<string | null>(null);
     const [detail, setDetail] = useState<PublicCourseDetailResponse | null>(null);
 
-    useEffect(() => {
-        let cancelled = false;
+    const catalogAbortRef = useRef<AbortController | null>(null);
+    const detailAbortRef = useRef<AbortController | null>(null);
 
-        async function loadCatalog() {
+    useEffect(() => {
+        const abort = new AbortController();
+        catalogAbortRef.current = abort;
+
+        async function loadCatalog(): Promise<void> {
             setLoading(true);
             setError(null);
 
             try {
-                const res = await api.get<PublicCourseListItem[]>("/public/courses");
-                if (!cancelled) {
-                    setCourses(Array.isArray(res.data) ? res.data : []);
+                const res = await api.get<PublicCourseListItem[]>("/public/courses", {
+                    signal: abort.signal,
+                });
+
+                const data = Array.isArray(res.data) ? res.data : [];
+                setCourses(data);
+            } catch (e: unknown) {
+                // Abort is not an error from user perspective
+                if (abort.signal.aborted) {
+                    return;
                 }
-            } catch (e: any) {
-                if (!cancelled) {
-                    setError(e?.message ?? "Impossible de charger le catalogue.");
-                    setCourses([]);
-                }
+                setError(publicCatalogErrorMessage(e));
+                setCourses([]);
             } finally {
-                if (!cancelled) {
+                if (!abort.signal.aborted) {
                     setLoading(false);
                 }
             }
@@ -94,12 +124,11 @@ export default function HomePage() {
         void loadCatalog();
 
         return () => {
-            cancelled = true;
+            abort.abort();
         };
     }, []);
 
     const sortedCourses = useMemo(() => {
-        // Catalog is public: we just keep stable ordering (title as fallback).
         return [...courses].sort((a, b) => (a.title ?? "").localeCompare(b.title ?? ""));
     }, [courses]);
 
@@ -107,17 +136,33 @@ export default function HomePage() {
         setSelectedCourseId(courseId);
         setDetailOpen(true);
 
+        // Cancel any pending detail call
+        if (detailAbortRef.current) {
+            detailAbortRef.current.abort();
+        }
+        const abort = new AbortController();
+        detailAbortRef.current = abort;
+
         setDetail(null);
         setDetailError(null);
         setDetailLoading(true);
 
         try {
-            const res = await api.get<PublicCourseDetailResponse>(`/public/courses/${courseId}`);
-            setDetail(res.data ?? null);
-        } catch (e: any) {
-            setDetailError(e?.message ?? "Impossible de charger le détail du cours.");
+            const res = await api.get<PublicCourseDetailResponse>(`/public/courses/${courseId}`, {
+                signal: abort.signal,
+            });
+            if (!abort.signal.aborted) {
+                setDetail(res.data ?? null);
+            }
+        } catch (e: unknown) {
+            if (abort.signal.aborted) {
+                return;
+            }
+            setDetailError(publicCatalogErrorMessage(e));
         } finally {
-            setDetailLoading(false);
+            if (!abort.signal.aborted) {
+                setDetailLoading(false);
+            }
         }
     }
 
@@ -184,16 +229,24 @@ export default function HomePage() {
 
                             return (
                                 <article key={course.id}>
-                                    <AlertDialog open={detailOpen && selectedCourseId === course.id}
-                                                 onOpenChange={(open) => {
-                                                     setDetailOpen(open);
-                                                     if (!open) {
-                                                         setSelectedCourseId(null);
-                                                         setDetail(null);
-                                                         setDetailError(null);
-                                                         setDetailLoading(false);
-                                                     }
-                                                 }}>
+                                    <AlertDialog
+                                        open={detailOpen && selectedCourseId === course.id}
+                                        onOpenChange={(open) => {
+                                            setDetailOpen(open);
+
+                                            if (!open) {
+                                                // Cancel pending detail call when closing dialog
+                                                if (detailAbortRef.current) {
+                                                    detailAbortRef.current.abort();
+                                                }
+
+                                                setSelectedCourseId(null);
+                                                setDetail(null);
+                                                setDetailError(null);
+                                                setDetailLoading(false);
+                                            }
+                                        }}
+                                    >
                                         <AlertDialogTrigger asChild>
                                             <button
                                                 type="button"
@@ -203,7 +256,6 @@ export default function HomePage() {
                                             >
                                                 <Card className="overflow-hidden transition-shadow hover:shadow-md">
                                                     <CardContent className="p-0">
-                                                        {/* Future course image → placeholder skeleton */}
                                                         <div className="relative">
                                                             <SkeletonLoader className="h-36 w-full rounded-none"/>
                                                         </div>
@@ -252,7 +304,8 @@ export default function HomePage() {
                                             ) : detailError ? (
                                                 <section
                                                     className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
-                                                    aria-live="polite">
+                                                    aria-live="polite"
+                                                >
                                                     {detailError}
                                                 </section>
                                             ) : (
@@ -283,8 +336,10 @@ export default function HomePage() {
                                                         ) : (
                                                             <ol className="space-y-3">
                                                                 {outline.map((sec, secIdx) => (
-                                                                    <li key={`${sec.title}-${secIdx}`}
-                                                                        className="rounded-lg border p-3">
+                                                                    <li
+                                                                        key={`${sec.title}-${secIdx}`}
+                                                                        className="rounded-lg border p-3"
+                                                                    >
                                                                         <h3 className="text-sm font-semibold">
                                                                             {sec.title}
                                                                         </h3>

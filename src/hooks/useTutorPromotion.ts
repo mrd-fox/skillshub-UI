@@ -1,4 +1,3 @@
-// src/hooks/useTutorPromotion.ts
 import api from "@/api/axios.ts";
 import {useAuth} from "@/context/AuthContext";
 import {toast} from "sonner";

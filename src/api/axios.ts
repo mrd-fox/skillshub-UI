@@ -1,4 +1,4 @@
-import axios, {AxiosError} from "axios";
+import axios, {AxiosError, InternalAxiosRequestConfig} from "axios";
 import {toast} from "sonner";
 
 export type ApiError = {
@@ -45,10 +45,30 @@ function redirectToLogin(): void {
     globalThis.location.assign(buildGatewayUrl("auth/login"));
 }
 
+function resolveRequestUrl(config: InternalAxiosRequestConfig): string {
+    const configBase = typeof config.baseURL === "string" ? config.baseURL : baseURL;
+    const rawUrl = typeof config.url === "string" ? config.url : "";
+    const normalizedBase = configBase.endsWith("/") ? configBase : `${configBase}/`;
+    return new URL(rawUrl.replace(/^\//, ""), normalizedBase).toString();
+}
+
+function isPublicApiUrl(url: string): boolean {
+    // Public endpoints must never trigger auth redirects
+    return url.includes("/api/public/");
+}
+
+function isAuthApiUrl(url: string): boolean {
+    // Prevent redirect loops on auth endpoints
+    return url.includes("/api/auth/login") || url.includes("/api/auth/logout");
+}
+
+function isHomePageLocation(): boolean {
+    // Safe and real: "/" exists in your app right now
+    return (globalThis.location.pathname || "/") === "/";
+}
+
 api.interceptors.response.use(
-    (response) => {
-        return response;
-    },
+    (response) => response,
     (error: AxiosError) => {
         const status =
             typeof error.response?.status === "number"
@@ -57,10 +77,30 @@ api.interceptors.response.use(
 
         const message = mapStatusToMessage(status);
 
-        if (status === 401) {
-            if (sessionExpiredHandled === false) {
-                sessionExpiredHandled = true;
+        const requestUrl = error.config ? resolveRequestUrl(error.config as InternalAxiosRequestConfig) : "";
 
+        if (status === 401) {
+            // 1) Never redirect to login for public APIs
+            if (isPublicApiUrl(requestUrl)) {
+                const apiError: ApiError = {status, message};
+                return Promise.reject(apiError);
+            }
+
+            // 2) Never redirect to login on auth endpoints (loop protection)
+            if (isAuthApiUrl(requestUrl)) {
+                const apiError: ApiError = {status, message};
+                return Promise.reject(apiError);
+            }
+
+            // 3) Optional safety: if you're already on the home page, do not force Keycloak
+            // This prevents "logout -> home -> 401 on some call -> redirect to keycloak"
+            if (isHomePageLocation()) {
+                const apiError: ApiError = {status, message};
+                return Promise.reject(apiError);
+            }
+
+            if (!sessionExpiredHandled) {
+                sessionExpiredHandled = true;
                 toast.warning(message);
                 redirectToLogin();
             }

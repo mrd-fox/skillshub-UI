@@ -158,13 +158,22 @@ jobs:
           if-no-files-found: error
           path: reports/sonar/sonar-test-report.xml
 
+      - name: Debug NYC output
+        if: always()
+        run: |
+          echo "***"
+          pwd
+          ls -la
+          ls -la .nyc_output || true
+          ls -la .nyc_output/out.json || true
+
       - name: Upload Cypress NYC output artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: cypress-nyc-output
           if-no-files-found: error
-          path: .nyc_output
+          path: .nyc_output/out.json
 
       - name: Upload Cypress screenshots (on failure)
         if: failure()

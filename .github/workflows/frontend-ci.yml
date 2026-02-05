@@ -216,18 +216,33 @@ jobs:
         with:
           name: frontend-coverage
           path: .
+          merge-multiple: true
 
       - name: Download Cypress NYC output artifact
         uses: actions/download-artifact@v4
         with:
           name: cypress-nyc-output
           path: .nyc_output
+          merge-multiple: true
 
       - name: Download Cypress Sonar report artifact
         uses: actions/download-artifact@v4
         with:
           name: cypress-sonar-report
           path: reports/sonar
+          merge-multiple: true
+
+      - name: Debug coverage files
+        run: |
+          echo "*** WORKSPACE ***"
+          pwd
+          ls -la
+          echo "*** COVERAGE ***"
+          ls -la coverage || true
+          echo "*** FIND LCOV ***"
+          find . -maxdepth 5 -type f -name "lcov.info" -print
+          echo "*** NYC ***"
+          ls -la .nyc_output || true
 
       - name: Merge coverage (Vitest + Cypress)
         run: npm run coverage:merge

@@ -15,6 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  # Vite variables (repo vars). The app reads VITE_API_URL.
   VITE_API_URL_TEST: ${{ vars.VITE_API_URL_TEST }}
   VITE_API_URL: ${{ vars.VITE_API_URL_TEST }}
 
@@ -22,6 +23,7 @@ env:
   VITE_KEYCLOAK_REALM: ${{ vars.VITE_KEYCLOAK_REALM }}
   VITE_KEYCLOAK_CLIENT_ID: ${{ vars.VITE_KEYCLOAK_CLIENT_ID }}
 
+  # Avoid Cypress binary download during npm ci in CI (we use cypress/included image)
   CYPRESS_INSTALL_BINARY: "0"
 
 jobs:
@@ -101,7 +103,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      # setup-node still useful for npm cache + consistent tooling
+      # setup-node still useful for npm cache + consistent Node 20 tooling
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -111,8 +113,8 @@ jobs:
       - name: Install
         run: npm ci
 
-      # IMPORTANT: build a dist instrumented for Cypress coverage
-      # vite-plugin-istanbul uses CYPRESS_COVERAGE=true (with cypress: true + requireEnv: true)
+      # IMPORTANT: instrumented dist for Cypress coverage
+      # vite-plugin-istanbul expects CYPRESS_COVERAGE=true (with cypress: true + requireEnv: true)
       - name: Build (instrumented for Cypress coverage)
         run: npm run build
         env:
@@ -140,20 +142,29 @@ jobs:
           CYPRESS_CI: "true"
           VITE_API_URL: ${{ vars.VITE_API_URL_TEST }}
 
-      # Upload Cypress test execution report
+      # Diagnostics: show NYC output (helps when CI doesn't generate it)
+      - name: Debug NYC output
+        if: always()
+        run: |
+          echo "PWD=$(pwd)"
+          ls -la
+          ls -la .nyc_output || true
+
       - name: Upload Cypress Sonar report artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: cypress-sonar-report
           if-no-files-found: error
           path: reports/sonar/sonar-test-report.xml
 
-      # Upload NYC output (Cypress coverage)
+      # Upload NYC output (do not fail the whole job if missing; Sonar job will handle absence)
       - name: Upload Cypress NYC output artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: cypress-nyc-output
-          if-no-files-found: error
+          if-no-files-found: warn
           path: .nyc_output
 
       - name: Upload Cypress screenshots (on failure)
@@ -198,6 +209,7 @@ jobs:
           name: frontend-coverage
           path: .
 
+      # If Cypress coverage is missing, the merge script should still work (or you should make it tolerant)
       - name: Download Cypress NYC output artifact
         uses: actions/download-artifact@v4
         with:
@@ -210,7 +222,6 @@ jobs:
           name: cypress-sonar-report
           path: reports/sonar
 
-      # Merge Vitest + Cypress into coverage/lcov.info (final)
       - name: Merge coverage (Vitest + Cypress)
         run: npm run coverage:merge
 

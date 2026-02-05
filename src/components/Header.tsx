@@ -54,7 +54,7 @@ const Header: FC<HeaderProps> = ({logoSize = 150}) => {
             const user = await userService.getMyProfile();
             setInternalUser(user);
             return user;
-        } catch (e: any) {
+        } catch {
             return null;
         }
     };
@@ -70,8 +70,9 @@ const Header: FC<HeaderProps> = ({logoSize = 150}) => {
         if (!currentUser) {
             try {
                 currentUser = await fetchInternalUser();
-            } catch (e: any) {
-                toast.error(e?.message || "Impossible de charger votre profil. Réessayez.");
+            } catch (error: unknown) {
+                const message = error instanceof Error ? error.message : "Impossible de charger votre profil. Réessayez.";
+                toast.error(message);
                 return;
             }
         }
@@ -113,9 +114,10 @@ const Header: FC<HeaderProps> = ({logoSize = 150}) => {
 
             setActiveRole("TUTOR");
             navigate("/dashboard/tutor");
-        } catch (e: any) {
+        } catch (error: unknown) {
             setResult("error");
 
+            const e = error as { status?: number; message?: string };
             const status = e?.status;
             if (status === 401) {
                 toast.error("Session expirée. Reconnectez-vous.");

@@ -11,8 +11,11 @@ export function SectionAccordion({onChange}: { onChange: (sections: Section[]) =
     const [sections, setSections] = useState<Section[]>([]);
 
     // 🔁 sync vers le parent
+    // English comment: onChange is intentionally omitted from deps to prevent infinite loop
+    // as we only want to notify parent when sections array changes, not when onChange ref changes
     useEffect(() => {
         onChange(sections);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sections]);
 
     const addSection = () => {

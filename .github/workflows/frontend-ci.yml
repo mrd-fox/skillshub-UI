@@ -101,6 +101,7 @@ jobs:
         with:
           fetch-depth: 0
 
+      # setup-node still useful for npm cache + consistent tooling
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -110,23 +111,26 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Download dist artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: dist
+      # IMPORTANT: build a dist instrumented for Cypress coverage
+      # vite-plugin-istanbul uses CYPRESS_COVERAGE=true (with cypress: true + requireEnv: true)
+      - name: Build (instrumented for Cypress coverage)
+        run: npm run build
+        env:
+          CYPRESS_COVERAGE: "true"
+          VITE_API_URL: ${{ vars.VITE_API_URL_TEST }}
 
       - name: Start preview
         run: npm run preview -- --host 0.0.0.0 --port 4173 --strictPort &
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL_TEST }}
 
       - name: Wait preview
         run: npx wait-on http://localhost:4173 -t 180000
 
-      # Generate Sonar Generic Test Execution report from Cypress
       - name: Prepare Cypress Sonar report directory
         run: mkdir -p reports/sonar
 
-      - name: Cypress run (headless) + Sonar report
+      - name: Cypress run (headless) + Sonar report + Coverage
         run: |
           npx cypress run --browser chrome \
             --reporter mocha-sonarqube-reporter \
@@ -134,13 +138,23 @@ jobs:
         env:
           CYPRESS_BASE_URL: http://localhost:4173
           CYPRESS_CI: "true"
+          VITE_API_URL: ${{ vars.VITE_API_URL_TEST }}
 
+      # Upload Cypress test execution report
       - name: Upload Cypress Sonar report artifact
         uses: actions/upload-artifact@v4
         with:
           name: cypress-sonar-report
           if-no-files-found: error
           path: reports/sonar/sonar-test-report.xml
+
+      # Upload NYC output (Cypress coverage)
+      - name: Upload Cypress NYC output artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-nyc-output
+          if-no-files-found: error
+          path: .nyc_output
 
       - name: Upload Cypress screenshots (on failure)
         if: failure()
@@ -169,17 +183,36 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download coverage artifact
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install
+        run: npm ci
+
+      - name: Download coverage artifact (Vitest)
         uses: actions/download-artifact@v4
         with:
           name: frontend-coverage
           path: .
+
+      - name: Download Cypress NYC output artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cypress-nyc-output
+          path: .nyc_output
 
       - name: Download Cypress Sonar report artifact
         uses: actions/download-artifact@v4
         with:
           name: cypress-sonar-report
           path: reports/sonar
+
+      # Merge Vitest + Cypress into coverage/lcov.info (final)
+      - name: Merge coverage (Vitest + Cypress)
+        run: npm run coverage:merge
 
       - name: SonarQube Cloud Scan
         uses: SonarSource/sonarqube-scan-action@v5

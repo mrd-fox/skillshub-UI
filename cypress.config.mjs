@@ -1,4 +1,5 @@
 import {defineConfig} from "cypress";
+import codeCoverageTask from "@cypress/code-coverage/task";
 
 export default defineConfig({
     e2e: {
@@ -17,6 +18,9 @@ export default defineConfig({
         responseTimeout: 10000,
 
         setupNodeEvents(on, config) {
+            // Register code coverage tasks (writes .nyc_output)
+            codeCoverageTask(on, config);
+
             // Force Cypress TypeScript compiler to use the Cypress tsconfig
             process.env.TS_NODE_PROJECT = "cypress/tsconfig.json";
 

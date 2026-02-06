@@ -1,11 +1,12 @@
-FROM node:20
+FROM node:20-alpine
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm install
+# Only copy lock files for faster cache if ever built in CI
+COPY package.json package-lock.json ./
 
-COPY . .
+# Do NOT install deps at build time (they will live in the volume)
+# Installation happens at container start via docker-compose command
 
 EXPOSE 5173
 

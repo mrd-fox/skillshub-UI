@@ -1,0 +1,260 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [ "dev", "master" ]
+  pull_request:
+    branches: [ "dev", "master" ]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: frontend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VITE_API_URL_TEST: ${{ vars.VITE_API_URL_TEST }}
+  VITE_API_URL: ${{ vars.VITE_API_URL_TEST }}
+
+  VITE_KEYCLOAK_URL: ${{ vars.VITE_KEYCLOAK_URL }}
+  VITE_KEYCLOAK_REALM: ${{ vars.VITE_KEYCLOAK_REALM }}
+  VITE_KEYCLOAK_CLIENT_ID: ${{ vars.VITE_KEYCLOAK_CLIENT_ID }}
+
+  CYPRESS_INSTALL_BINARY: "0"
+
+jobs:
+  build:
+    name: Build Stage (install • lint • build)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          if-no-files-found: error
+          path: dist
+
+  unit:
+    name: Unit Tests (coverage)
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install
+        run: npm ci
+
+      - name: Unit/Integration tests (coverage)
+        run: npm run test:coverage
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          if-no-files-found: error
+          path: |
+            coverage/lcov.info
+
+  cypress:
+    name: Cypress E2E (headless)
+    runs-on: ubuntu-latest
+    needs: build
+    container: cypress/included:13.17.0
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install
+        run: npm ci
+
+      - name: Build (instrumented for Cypress coverage)
+        run: npm run build
+        env:
+          CYPRESS_COVERAGE: "true"
+          VITE_API_URL: ${{ vars.VITE_API_URL_TEST }}
+
+      - name: Start preview
+        run: npm run preview -- --host 0.0.0.0 --port 4173 --strictPort &
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL_TEST }}
+
+      - name: Wait preview
+        run: npx wait-on http://localhost:4173 -t 180000
+
+      - name: Prepare Cypress Sonar report directory
+        run: mkdir -p reports/sonar
+
+      - name: Cypress run (headless) + Sonar report + Coverage
+        run: |
+          npx cypress run --browser chrome \
+            --reporter mocha-sonarqube-reporter \
+            --reporter-options output=reports/sonar/sonar-test-report.xml
+        env:
+          CYPRESS_BASE_URL: http://localhost:4173
+          CYPRESS_CI: "true"
+          VITE_API_URL: ${{ vars.VITE_API_URL_TEST }}
+          CYPRESS_COVERAGE: "true"
+
+      - name: Debug NYC output
+        if: always()
+        run: |
+          echo "***"
+          pwd
+          ls -la
+          ls -la .nyc_output || true
+          ls -la .nyc_output/out.json || true
+
+      - name: Upload Cypress Sonar report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-sonar-report
+          if-no-files-found: error
+          path: reports/sonar/sonar-test-report.xml
+
+      - name: Upload Cypress NYC output artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-nyc-output
+          if-no-files-found: error
+          path: .nyc_output/out.json
+
+      - name: Upload Cypress screenshots (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-screenshots
+          if-no-files-found: ignore
+          path: cypress/screenshots
+
+      - name: Upload Cypress videos (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-videos
+          if-no-files-found: ignore
+          path: cypress/videos
+
+  sonar:
+    name: Sonar (Frontend)
+    runs-on: ubuntu-latest
+    needs: [ unit, cypress ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install
+        run: npm ci
+
+      - name: Download coverage artifact (Vitest)
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-coverage
+          path: .
+          merge-multiple: true
+
+      - name: Normalize Vitest LCOV path
+        run: |
+          mkdir -p coverage
+          if [ -f "coverage/lcov.info" ]; then
+            echo "coverage/lcov.info already present"
+            exit 0
+          fi
+          if [ -f "lcov.info" ]; then
+            mv lcov.info coverage/lcov.info
+            echo "Moved ./lcov.info -> coverage/lcov.info"
+            exit 0
+          fi
+          echo "Vitest LCOV not found (expected coverage/lcov.info or ./lcov.info)"
+          exit 1
+
+      - name: Download Cypress NYC output artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cypress-nyc-output
+          path: .nyc_output
+          merge-multiple: true
+
+      - name: Download Cypress Sonar report artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cypress-sonar-report
+          path: reports/sonar
+          merge-multiple: true
+
+      - name: Debug coverage files
+        run: |
+          echo "*** WORKSPACE ***"
+          pwd
+          ls -la
+          echo "*** COVERAGE ***"
+          ls -la coverage || true
+          echo "*** FIND LCOV ***"
+          find . -maxdepth 5 -type f -name "lcov.info" -print
+          echo "*** NYC ***"
+          ls -la .nyc_output || true
+          ls -la .nyc_output/out.json || true
+          echo "*** CYPRESS REPORT ***"
+          ls -la reports/sonar || true
+
+      - name: Merge coverage (Vitest + Cypress)
+        run: npm run coverage:merge
+
+      - name: SonarQube Cloud Scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
+          SONAR_ORG: ${{ secrets.SONAR_ORG }}

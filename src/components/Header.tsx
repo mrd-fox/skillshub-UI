@@ -13,36 +13,14 @@ import {
 import {Button} from "@/components/ui/button.tsx";
 import {useLocation, useNavigate} from "react-router-dom";
 import {TutorRequestDialog} from "@/components/tutor/TutorRequestDialog.tsx";
-import api from "@/api/axios.ts";
+import {userService} from "@/api/services";
+import {InternalUser} from "@/api/types/user";
 import {toast} from "sonner";
 
 interface HeaderProps {
     logoSize?: number;
 }
 
-type InternalUserEnvelope = {
-    created?: boolean;
-    user?: {
-        id: string;
-        externalId?: string;
-        keycloakId?: string;
-        firstName?: string | null;
-        lastName?: string | null;
-        email: string;
-        active?: boolean;
-        roles?: Array<string | { name: string }>;
-    };
-};
-
-type InternalUser = {
-    id: string;
-    keycloakId: string;
-    email: string;
-    roles: string[];
-    firstName?: string | null;
-    lastName?: string | null;
-    active?: boolean;
-};
 
 const Header: FC<HeaderProps> = ({logoSize = 150}) => {
     const {t} = useTranslation();
@@ -71,50 +49,12 @@ const Header: FC<HeaderProps> = ({logoSize = 150}) => {
         return null;
     }
 
-    const mapInternalUser = (payload: any): InternalUser | null => {
-        const candidate = payload?.user ?? payload?.internalUser ?? payload;
-        if (!candidate) {
-            return null;
-        }
-
-        const rawRoles = Array.isArray(candidate.roles) ? candidate.roles : [];
-        const mappedRoles = rawRoles
-            .map((r: any) => {
-                if (typeof r === "string") {
-                    return r;
-                } else if (r && typeof r.name === "string") {
-                    return r.name;
-                } else {
-                    return null;
-                }
-            })
-            .filter(Boolean) as string[];
-
-        const keycloakId = candidate.externalId ?? candidate.keycloakId;
-        if (!keycloakId) {
-            return null;
-        }
-
-        return {
-            id: candidate.id,
-            keycloakId,
-            email: candidate.email,
-            roles: mappedRoles,
-            firstName: candidate.firstName ?? null,
-            lastName: candidate.lastName ?? null,
-            active: candidate.active ?? true,
-        };
-    };
-
     const fetchInternalUser = async (): Promise<InternalUser | null> => {
-        const res = await api.get("/users/me");
-        const envelope = res.data as InternalUserEnvelope;
-
-        const mapped = mapInternalUser(envelope);
-        if (mapped) {
-            setInternalUser(mapped as any);
-            return mapped;
-        } else {
+        try {
+            const user = await userService.getMyProfile();
+            setInternalUser(user);
+            return user;
+        } catch {
             return null;
         }
     };
@@ -130,8 +70,9 @@ const Header: FC<HeaderProps> = ({logoSize = 150}) => {
         if (!currentUser) {
             try {
                 currentUser = await fetchInternalUser();
-            } catch (e: any) {
-                toast.error(e?.message || "Impossible de charger votre profil. Réessayez.");
+            } catch (error: unknown) {
+                const message = error instanceof Error ? error.message : "Impossible de charger votre profil. Réessayez.";
+                toast.error(message);
                 return;
             }
         }
@@ -165,26 +106,18 @@ const Header: FC<HeaderProps> = ({logoSize = 150}) => {
         setResult(null);
 
         try {
-            const res = await api.post("/users/promote-to-tutor");
-
-            const mapped = mapInternalUser(res.data);
-            if (mapped) {
-                setInternalUser(mapped as any);
-            } else {
-                const refreshed = await fetchInternalUser();
-                if (!refreshed) {
-                    throw new Error("Promotion OK mais profil interne introuvable.");
-                }
-            }
+            const promotedUser = await userService.promoteToTutor();
+            setInternalUser(promotedUser);
 
             setResult("success");
             setDialogOpen(false);
 
             setActiveRole("TUTOR");
             navigate("/dashboard/tutor");
-        } catch (e: any) {
+        } catch (error: unknown) {
             setResult("error");
 
+            const e = error as { status?: number; message?: string };
             const status = e?.status;
             if (status === 401) {
                 toast.error("Session expirée. Reconnectez-vous.");

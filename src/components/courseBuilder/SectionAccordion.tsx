@@ -5,20 +5,23 @@ import {useEffect, useState} from "react";
 import {Input} from "@/components/ui/input.tsx";
 
 type Chapter = { id: number; title: string; position: number };
-type Section = { id: number; title: string; chapters: Chapter[] };
+type Section = { id: number; title: string; position: number; chapters: Chapter[] };
 
 export function SectionAccordion({onChange}: { onChange: (sections: Section[]) => void }) {
     const [sections, setSections] = useState<Section[]>([]);
 
     // 🔁 sync vers le parent
+    // English comment: onChange is intentionally omitted from deps to prevent infinite loop
+    // as we only want to notify parent when sections array changes, not when onChange ref changes
     useEffect(() => {
         onChange(sections);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sections]);
 
     const addSection = () => {
         setSections(prev => [
             ...prev,
-            {id: Date.now(), title: "", chapters: []},
+            {id: Date.now(), title: "", position: prev.length + 1, chapters: []},
         ]);
     };
 

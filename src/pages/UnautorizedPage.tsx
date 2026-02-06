@@ -1,11 +1,10 @@
-import {useAuth} from "@/context/AuthContext";
 import {motion} from "framer-motion";
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card.tsx";
 import {AlertCircle} from "lucide-react";
 import {Button} from "@/components/ui/button.tsx";
 
 export default function UnauthorizedPage() {
-    const {login} = useAuth();
+
     return (
         <div className="flex items-center justify-center min-h-screen bg-background">
             <motion.div
@@ -24,7 +23,8 @@ export default function UnauthorizedPage() {
                         <p className="text-muted-foreground">
                             Vous n’avez pas les permissions nécessaires pour consulter cette page.
                         </p>
-                        <Button variant="outline" onClick={() => (window.location.href = "/")}>
+                        <Button variant="outline" onClick={() => (globalThis.location.assign("/"))}>
+                            {/*<Button variant="outline" onClick={() => (window.location.href ="/")}>*/}
                             Retour à l’accueil
                         </Button>
                     </CardContent>

@@ -1,7 +1,7 @@
+import {useMemo, useState} from "react";
 import {Textarea} from "@/components/ui/textarea.tsx";
 import {useCourseBuilder} from "@/layout/tutor/CourseBuilderLayout.tsx";
 import {useAuth} from "@/context/AuthContext.tsx";
-import {useMemo, useState} from "react";
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card.tsx";
 import {Badge} from "@/components/ui/badge.tsx";
 import {Label} from "@/components/ui/label.tsx";
@@ -15,7 +15,7 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger
+    AlertDialogTrigger,
 } from "@/components/ui/alert-dialog.tsx";
 import {Button} from "@/components/ui/button.tsx";
 
@@ -34,12 +34,20 @@ function formatDate(value?: string | null): string {
     return d.toLocaleString();
 }
 
-function hasProcessingVideo(course: any): boolean {
-    if (!course) {
+function hasProcessingVideo(course: unknown): boolean {
+    if (!course || typeof course !== "object") {
         return false;
     }
 
-    const sections = course.sections ?? [];
+    const courseObj = course as {
+        sections?: Array<{
+            chapters?: Array<{
+                video?: { status?: VideoStatus } | null;
+            }>;
+        }>;
+    };
+
+    const sections = courseObj.sections ?? [];
     for (const section of sections) {
         const chapters = section.chapters ?? [];
         for (const chapter of chapters) {
@@ -53,11 +61,31 @@ function hasProcessingVideo(course: any): boolean {
     return false;
 }
 
+function getDeleteDisabledReason(args: Readonly<{
+    courseStatus: string;
+    isWaitingValidation: boolean;
+    processingLock: boolean;
+}>): string {
+    if (args.isWaitingValidation) {
+        return "Désactivé : en attente de validation.";
+    }
+
+    if (args.processingLock) {
+        return "Désactivé : vidéo en PROCESSING.";
+    }
+
+    if (args.courseStatus !== "DRAFT") {
+        return "Désactivé : seulement pour DRAFT.";
+    }
+
+    return "Désactivé.";
+}
+
 export default function EditCoursePage() {
     const {course, setCourse, loading} = useCourseBuilder();
     const {internalUser} = useAuth();
 
-    const [deleteUiDone, setDeleteUiDone] = useState(false);
+    const [deleteUiDone, setDeleteUiDone] = useState<boolean>(false);
 
     const authorLabel = useMemo(() => {
         if (!internalUser) {
@@ -70,17 +98,25 @@ export default function EditCoursePage() {
 
         if (fullName.length > 0) {
             return `${fullName} (${internalUser.email})`;
-        } else {
-            return internalUser.email;
         }
+
+        return internalUser.email;
     }, [internalUser]);
 
+    const isWaitingValidation = useMemo(() => {
+        return course?.status === "WAITING_VALIDATION";
+    }, [course?.status]);
+
     const processingLock = useMemo(() => {
-        return hasProcessingVideo(course as any);
+        return hasProcessingVideo(course);
     }, [course]);
 
     const canEditInfo = useMemo(() => {
         if (!course) {
+            return false;
+        }
+
+        if (isWaitingValidation) {
             return false;
         }
 
@@ -89,10 +125,14 @@ export default function EditCoursePage() {
         }
 
         return true;
-    }, [course, processingLock]);
+    }, [course, isWaitingValidation, processingLock]);
 
     const canDeleteDraft = useMemo(() => {
         if (!course) {
+            return false;
+        }
+
+        if (isWaitingValidation) {
             return false;
         }
 
@@ -100,12 +140,20 @@ export default function EditCoursePage() {
             return false;
         }
 
-        if (course.status === "DRAFT") {
-            return true;
-        } else {
-            return false;
+        return course.status === "DRAFT";
+    }, [course, isWaitingValidation, processingLock]);
+
+    const deleteDisabledReason = useMemo(() => {
+        if (canDeleteDraft) {
+            return null;
         }
-    }, [course, processingLock]);
+
+        return getDeleteDisabledReason({
+            courseStatus: course?.status ?? "",
+            isWaitingValidation,
+            processingLock,
+        });
+    }, [canDeleteDraft, course?.status, isWaitingValidation, processingLock]);
 
     if (loading) {
         return (
@@ -149,7 +197,14 @@ export default function EditCoursePage() {
                             sont persistés via le bouton global <strong>Save course</strong>.
                         </p>
 
-                        {processingLock ? (
+                        {isWaitingValidation ? (
+                            <div className="mt-2 rounded-lg border bg-muted/20 p-3 text-sm text-muted-foreground">
+                                Ce cours est <strong>en attente de validation</strong> : édition et suppression
+                                désactivées.
+                            </div>
+                        ) : null}
+
+                        {!isWaitingValidation && processingLock ? (
                             <div
                                 className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
                                 Édition désactivée : au moins une vidéo est en <strong>PROCESSING</strong>. Le polling
@@ -180,9 +235,7 @@ export default function EditCoursePage() {
                 <CardContent className="space-y-5">
                     <div className="space-y-2">
                         <Label>Auteur</Label>
-                        <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
-                            {authorLabel}
-                        </div>
+                        <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">{authorLabel}</div>
                     </div>
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -195,9 +248,7 @@ export default function EditCoursePage() {
 
                         <div className="space-y-2">
                             <Label>Statut</Label>
-                            <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
-                                {course.status}
-                            </div>
+                            <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">{course.status}</div>
                         </div>
                     </div>
 
@@ -212,12 +263,11 @@ export default function EditCoursePage() {
                                 setCourse((prev) => {
                                     if (!prev) {
                                         return prev;
-                                    } else {
-                                        return {
-                                            ...prev,
-                                            title: next,
-                                        };
                                     }
+                                    return {
+                                        ...prev,
+                                        title: next,
+                                    };
                                 });
                             }}
                         />
@@ -235,12 +285,11 @@ export default function EditCoursePage() {
                                 setCourse((prev) => {
                                     if (!prev) {
                                         return prev;
-                                    } else {
-                                        return {
-                                            ...prev,
-                                            description: next,
-                                        };
                                     }
+                                    return {
+                                        ...prev,
+                                        description: next,
+                                    };
                                 });
                             }}
                         />
@@ -303,15 +352,9 @@ export default function EditCoursePage() {
                                     </AlertDialogContent>
                                 </AlertDialog>
 
-                                {!canDeleteDraft ? (
+                                {deleteDisabledReason ? (
                                     <div className="text-xs text-muted-foreground">
-                                        {processingLock ? (
-                                            <>Désactivé : vidéo en PROCESSING.</>
-                                        ) : course.status !== "DRAFT" ? (
-                                            <>Désactivé : seulement pour DRAFT.</>
-                                        ) : (
-                                            <>Désactivé.</>
-                                        )}
+                                        {deleteDisabledReason}
                                     </div>
                                 ) : null}
                             </div>

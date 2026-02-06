@@ -1,27 +1,38 @@
-import path from 'node:path';
-import tailwindcss from "@tailwindcss/vite"
-import react from '@vitejs/plugin-react';
-import {defineConfig} from 'vite';
+import {defineConfig, type PluginOption} from "vite";
+import react from "@vitejs/plugin-react";
+import istanbul from "vite-plugin-istanbul";
+import * as path from "node:path";
 
-export default defineConfig({
-    plugins: [react(), tailwindcss()],
-    optimizeDeps: {
-        include: ["@radix-ui/react-avatar"]
-    },
-    resolve: {
-        alias: {
-            '@': path.resolve(__dirname, './src'),
+export default defineConfig(() => {
+    const reactPlugins = react();
+    const normalizedReactPlugins: PluginOption[] = Array.isArray(reactPlugins) ? reactPlugins : [reactPlugins];
+
+    return {
+        plugins: [
+            ...normalizedReactPlugins,
+            istanbul({
+                include: "src/**/*",
+                exclude: [
+                    "node_modules/**",
+                    "src/test/**",
+                    "src/components/ui/**",
+                    "**/*.test.*",
+                    "**/*.spec.*",
+                    "**/*.stories.*",
+                ],
+                extension: [".ts", ".tsx"],
+                cypress: true,
+                requireEnv: true,
+                forceBuildInstrument: true,
+            }),
+        ],
+        resolve: {
+            alias: {
+                "@": path.resolve(__dirname, "./src"),
+            },
         },
-    },
-    server: {
-        watch: {
-            usePolling: true,
-            interval: 1000,
+        build: {
+            sourcemap: true,
         },
-        host: true,
-        port: 5173
-    },
-    ssr: {
-        noExternal: ["@radix-ui/react-avatar"],
-    },
+    };
 });

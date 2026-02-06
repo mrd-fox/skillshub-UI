@@ -1,5 +1,5 @@
 // src/components/courseBuilder/CreateCourseForm.tsx
-import api from "@/api/axios.ts";
+import {courseService} from "@/api/services";
 import {useState} from "react";
 import {z} from "zod";
 import {Button} from "@/components/ui/button";
@@ -15,6 +15,7 @@ const courseSchema = z.object({
     sections: z.array(
         z.object({
             title: z.string().min(1, "Le titre de section est requis"),
+            position: z.number(),
             chapters: z.array(
                 z.object({
                     title: z.string().min(1, "Le titre du chapitre est requis"),
@@ -57,8 +58,7 @@ export default function CreateCourseForm({sections}: { sections: any[] }) {
         }
 
         try {
-            const res = await api.post("/course", payload);
-            const createdCourse = res.data;
+            const createdCourse = await courseService.createCourse(payload);
             toast.success("Cours créé avec succès !");
             navigate(`/dashboard/tutor/course-builder/${createdCourse.id}`, {
                 state: {course: createdCourse},

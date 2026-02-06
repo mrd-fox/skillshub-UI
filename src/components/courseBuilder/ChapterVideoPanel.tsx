@@ -1,451 +1,457 @@
-import {ChangeEvent, useCallback, useMemo, useRef, useState} from "react";
+import {useEffect, useMemo, useRef, useState} from "react";
 import * as tus from "tus-js-client";
 
-import {Badge} from "@/components/ui/badge";
-import {Button} from "@/components/ui/button";
-import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
-import {Input} from "@/components/ui/input";
-import {Label} from "@/components/ui/label";
+import {videoService} from "@/api/services";
+import {confirmVideo, initVideo} from "@/api/videoApi";
+import {InitVideoResponse} from "@/types/video.ts";
 
-import {confirmVideo, initVideo, publishVideo} from "@/api/videoApi";
-import type {InitVideoResponse, VideoResponse, VideoStatusEnum} from "@/types/video";
-import {extractVimeoId} from "@/types/video";
+import {Button} from "@/components/ui/button";
+import {Input} from "@/components/ui/input";
+import {Progress} from "@/components/ui/progress";
+import {Separator} from "@/components/ui/separator";
+import {cn} from "@/lib/utils";
 import VimeoPlayer from "@/components/video/VimeoPlayer.tsx";
+
+type VideoStatus = "PENDING" | "PROCESSING" | "READY" | "FAILED" | "EXPIRED" | "UNKNOWN";
+
+type ChapterVideo = {
+    videoId?: string | null;
+    status?: VideoStatus | null;
+
+    // Canonical internal uri persisted in DB. Example: "vimeo://1161124790"
+    sourceUri?: string | null;
+
+    vimeoId?: string | number | null;
+    embedHash?: string | null;
+
+    thumbnailUrl?: string | null;
+    errorMessage?: string | null;
+};
 
 type Props = {
     courseId: string;
     sectionId: string;
     chapterId: string;
-    chapterTitle?: string;
 
-    /**
-     * Current video state coming from the course GET response.
-     * Keep it loose for now because CourseBuilderLayout still uses older types.
-     */
-    video?: Partial<VideoResponse> | null;
+    video?: ChapterVideo | null;
 
-    /**
-     * Called after INIT/CONFIRM/PUBLISH succeed to refresh course state.
-     */
-    onRefresh?: () => Promise<void>;
+    onRequestRefresh: () => void;
+
+    className?: string;
 };
 
-type LocalUploadState =
-    | { kind: "idle" }
-    | { kind: "initializing" }
-    | { kind: "uploading"; percent: number }
-    | { kind: "confirming" }
-    | { kind: "done" }
-    | { kind: "error"; message: string };
 
-function statusBadgeVariant(
-    status: VideoStatusEnum | undefined | null
-): "default" | "secondary" | "destructive" | "outline" {
+function formatStatus(status?: VideoStatus | null): VideoStatus {
     if (!status) {
-        return "outline";
-    }
-
-    if (status === "READY") {
-        return "default";
-    } else if (status === "PUBLISHED") {
-        return "default";
-    } else if (status === "FAILED") {
-        return "destructive";
-    } else if (status === "REJECTED") {
-        return "destructive";
-    } else if (status === "EXPIRED") {
-        return "destructive";
-    } else {
-        return "secondary";
-    }
-}
-
-function formatStatusLabel(status: VideoStatusEnum | undefined | null): string {
-    if (!status) {
-        return "NO_VIDEO";
+        return "UNKNOWN";
     }
     return status;
 }
 
-function canPreview(status: VideoStatusEnum | undefined | null): boolean {
-    if (!status) {
-        return false;
+function buildSourceUri(video?: ChapterVideo | null): string | null {
+    if (!video) {
+        return null;
     }
 
-    if (status === "READY") {
-        return true;
-    } else if (status === "IN_REVIEW") {
-        return true;
-    } else if (status === "PUBLISHED") {
-        return true;
-    } else {
-        return false;
+    if (typeof video.sourceUri === "string" && video.sourceUri.trim().length > 0) {
+        return video.sourceUri.trim();
     }
+
+    if (video.vimeoId !== null && video.vimeoId !== undefined) {
+        const id = String(video.vimeoId).trim();
+        if (id.length > 0) {
+            return `vimeo://${id}`;
+        }
+    }
+
+    return null;
 }
 
-export function ChapterVideoPanel(props: Props) {
-    const {courseId, sectionId, chapterId, chapterTitle, video, onRefresh} = props;
+export default function ChapterVideoPanel(props: Props) {
+    const {courseId, sectionId, chapterId, video, onRequestRefresh, className} = props;
+
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const tusUploadRef = useRef<tus.Upload | null>(null);
 
     const [file, setFile] = useState<File | null>(null);
-    const [initResult, setInitResult] = useState<InitVideoResponse | null>(null);
-    const [uploadState, setUploadState] = useState<LocalUploadState>({kind: "idle"});
-    const [publishLoading, setPublishLoading] = useState(false);
+    const [progressPct, setProgressPct] = useState<number>(0);
+    const [message, setMessage] = useState<string>("En attente.");
 
-    const uploadRef = useRef<tus.Upload | null>(null);
+    const [uploadLoading, setUploadLoading] = useState<boolean>(false);
+    const [deleteLoading, setDeleteLoading] = useState<boolean>(false);
 
-    const currentStatus = (video?.status as VideoStatusEnum | undefined) ?? undefined;
+    // Lazy player: instantiate only when user clicks
+    const [previewEnabled, setPreviewEnabled] = useState<boolean>(false);
 
-    const currentVideoId = useMemo(() => {
-        const fromVideo = typeof video?.id === "string" ? (video.id as string) : null;
-        const fromInit = typeof initResult?.videoId === "string" ? initResult.videoId : null;
-        return fromVideo ?? fromInit ?? null;
-    }, [video?.id, initResult?.videoId]);
+    const status = useMemo(() => {
+        return formatStatus(video?.status ?? "UNKNOWN");
+    }, [video?.status]);
 
-    const sourceUri = useMemo(() => {
-        // Backend is source of truth: sourceUri must come from refreshed course state.
-        // initResult may not include sourceUri by design.
-        const fromVideo = typeof video?.sourceUri === "string" ? (video.sourceUri as string) : null;
-        const fromInit = typeof initResult?.sourceUri === "string" ? initResult.sourceUri : null;
-        return fromVideo ?? fromInit ?? null;
-    }, [video?.sourceUri, initResult?.sourceUri]);
-
-    const thumbnailUrl = useMemo(() => {
-        const fromVideo = typeof video?.thumbnailUrl === "string" ? (video.thumbnailUrl as string) : null;
-        const fromInit = typeof initResult?.thumbnailUrl === "string" ? initResult.thumbnailUrl : null;
-        return fromVideo ?? fromInit ?? null;
-    }, [video?.thumbnailUrl, initResult?.thumbnailUrl]);
-
-    const embedHash = useMemo(() => {
-        // Backend is source of truth: embedHash comes from the refreshed course state.
-        // Keep it defensive because VideoResponse type may lag behind backend contract.
-        const v: any = video as any;
-        if (v && typeof v.embedHash === "string") {
-            const trimmed = v.embedHash.trim();
-            if (trimmed.length > 0) {
-                return trimmed;
-            } else {
-                return null;
-            }
-        } else {
-            return null;
+    const hasVideo = useMemo(() => {
+        if (!video) {
+            return false;
         }
+        if (!video.videoId) {
+            return false;
+        }
+        return true;
     }, [video]);
 
-    const derivedVimeoId = useMemo(() => {
-        return extractVimeoId(sourceUri ?? undefined);
-    }, [sourceUri]);
+    const sourceUri = useMemo(() => {
+        return buildSourceUri(video);
+    }, [video]);
 
-    const stopCurrentUpload = useCallback(() => {
-        const current = uploadRef.current;
-        if (current) {
+    const isReady = useMemo(() => {
+        return status === "READY";
+    }, [status]);
+
+    const isProcessingOrPending = useMemo(() => {
+        if (status === "PENDING") {
+            return true;
+        } else if (status === "PROCESSING") {
+            return true;
+        } else {
+            return false;
+        }
+    }, [status]);
+
+    const isBusy = useMemo(() => {
+        if (uploadLoading || deleteLoading) {
+            return true;
+        } else {
+            return false;
+        }
+    }, [uploadLoading, deleteLoading]);
+
+    const canUpload = useMemo(() => {
+        if (!file) {
+            return false;
+        }
+        if (isBusy) {
+            return false;
+        }
+        if (isProcessingOrPending) {
+            return false;
+        }
+        return true;
+    }, [file, isBusy, isProcessingOrPending]);
+
+    const canDelete = useMemo(() => {
+        if (!hasVideo) {
+            return false;
+        }
+        if (isBusy) {
+            return false;
+        }
+        return true;
+    }, [hasVideo, isBusy]);
+
+    useEffect(() => {
+        // Reset local state when chapter changes
+        setFile(null);
+        setProgressPct(0);
+        setMessage("En attente.");
+        setPreviewEnabled(false);
+
+        if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+        }
+
+        if (tusUploadRef.current) {
             try {
-                current.abort(true);
+                tusUploadRef.current.abort(true);
             } catch {
-                // ignore
+                // Ignore abort errors
+            } finally {
+                tusUploadRef.current = null;
             }
         }
-        uploadRef.current = null;
-    }, []);
+    }, [courseId, sectionId, chapterId]);
 
-    const startTusUpload = useCallback(
-        async (selectedFile: File, init: InitVideoResponse) => {
-            if (!init || !init.uploadUrl) {
-                setUploadState({kind: "error", message: "INIT response missing uploadUrl."});
-                return;
-            }
-
-            stopCurrentUpload();
-            setUploadState({kind: "uploading", percent: 0});
-
-            const upload = new tus.Upload(selectedFile, {
-                /**
-                 * CRITICAL FIX:
-                 * init.uploadUrl is a pre-created TUS resource URL:
-                 * - Using "endpoint" makes tus-js-client send POST (create) -> Vimeo returns 405
-                 * - Using "uploadUrl" makes tus-js-client send PATCH (upload chunks) -> correct
-                 */
-                uploadUrl: init.uploadUrl,
-                retryDelays: [0, 1000, 3000, 5000],
-                metadata: {
-                    filename: selectedFile.name,
-                    filetype: selectedFile.type,
-                },
-                onError: (error) => {
-                    setUploadState({kind: "error", message: error?.message ?? "Upload failed."});
-                },
-                onProgress: (bytesUploaded, bytesTotal) => {
-                    if (bytesTotal > 0) {
-                        const percent = Math.round((bytesUploaded / bytesTotal) * 100);
-                        setUploadState({kind: "uploading", percent});
-                    } else {
-                        setUploadState({kind: "uploading", percent: 0});
-                    }
-                },
-                onSuccess: async () => {
-                    setUploadState({kind: "confirming"});
-                    try {
-                        await confirmVideo({courseId, sectionId, chapterId});
-
-                        setUploadState({kind: "done"});
-
-                        if (typeof onRefresh === "function") {
-                            await onRefresh();
-                        }
-                    } catch (e: any) {
-                        setUploadState({
-                            kind: "error",
-                            message: e?.message ?? "Confirm failed.",
-                        });
-                    }
-                },
-            });
-
-            uploadRef.current = upload;
-
-            try {
-                upload.start();
-            } catch (e: any) {
-                setUploadState({kind: "error", message: e?.message ?? "Upload start failed."});
-            }
-        },
-        [courseId, sectionId, chapterId, onRefresh, stopCurrentUpload]
-    );
-
-    const onPickFile = useCallback((evt: ChangeEvent<HTMLInputElement>) => {
-        const files = evt.target.files;
-        if (!files || files.length === 0) {
+    function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+        const picked = e.target.files?.[0];
+        if (!picked) {
             setFile(null);
             return;
         }
-        setFile(files[0]);
-    }, []);
 
-    const onInitUpload = useCallback(async () => {
+        setFile(picked);
+        setProgressPct(0);
+        setMessage("Fichier sélectionné.");
+    }
+
+    function handleResetLocal() {
+        setProgressPct(0);
+        setMessage("En attente.");
+        setFile(null);
+
+        if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+        }
+
+        if (tusUploadRef.current) {
+            try {
+                tusUploadRef.current.abort(true);
+            } catch {
+                // Ignore abort errors
+            } finally {
+                tusUploadRef.current = null;
+            }
+        }
+    }
+
+    async function handleUploadAll() {
+        if (!canUpload) {
+            return;
+        }
         if (!file) {
-            setUploadState({kind: "error", message: "Choose a file first."});
             return;
         }
 
-        setUploadState({kind: "initializing"});
-        setInitResult(null);
+        setUploadLoading(true);
+        setMessage("Init + upload...");
 
         try {
-            const init = await initVideo({
+            // 1) INIT
+            const initRes = (await initVideo({
                 courseId,
                 sectionId,
                 chapterId,
                 sizeBytes: file.size,
+            })) as InitVideoResponse;
+
+            if (!initRes || !initRes.uploadUrl) {
+                throw new Error("InitVideoResponse: missing uploadUrl.");
+            }
+
+            onRequestRefresh();
+
+            // 2) UPLOAD (TUS)
+            await new Promise<void>((resolve, reject) => {
+                const upload = new tus.Upload(file, {
+                    uploadUrl: initRes.uploadUrl,
+                    retryDelays: [0, 1000, 3000, 5000],
+                    metadata: {
+                        filename: file.name,
+                        filetype: file.type,
+                    },
+                    onProgress: (bytesUploaded: number, bytesTotal: number) => {
+                        if (bytesTotal <= 0) {
+                            setProgressPct(0);
+                            return;
+                        }
+                        const pct = Math.floor((bytesUploaded / bytesTotal) * 100);
+                        setProgressPct(pct);
+                    },
+                    onError: (error: Error) => {
+                        reject(error);
+                    },
+                    onSuccess: () => {
+                        resolve();
+                    },
+                });
+
+                tusUploadRef.current = upload;
+                upload.start();
             });
 
-            setInitResult(init);
-            await startTusUpload(file, init);
-        } catch (e: any) {
-            setUploadState({
-                kind: "error",
-                message: e?.message ?? "Init failed.",
+            setMessage("Upload OK. Confirm...");
+
+            // 3) CONFIRM
+            await confirmVideo({
+                courseId,
+                sectionId,
+                chapterId,
             });
+
+            setMessage("Confirm OK. Traitement en cours côté backend.");
+            onRequestRefresh();
+
+            setFile(null);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = "";
+            }
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : "Upload failed.";
+            setMessage(msg);
+        } finally {
+            setUploadLoading(false);
         }
-    }, [file, courseId, sectionId, chapterId, startTusUpload]);
+    }
 
-    const onPublish = useCallback(async () => {
-        if (!currentVideoId) {
+    async function handleDeleteVideo() {
+        if (!canDelete) {
             return;
         }
 
-        setPublishLoading(true);
+        setDeleteLoading(true);
+        setMessage("Suppression vidéo...");
+
         try {
-            await publishVideo({videoId: currentVideoId});
+            await videoService.deleteVideo({courseId, sectionId, chapterId});
 
-            if (typeof onRefresh === "function") {
-                await onRefresh();
-            }
+            setMessage("Vidéo supprimée.");
+            setPreviewEnabled(false);
+            onRequestRefresh();
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : "Delete video failed.";
+            setMessage(msg);
         } finally {
-            setPublishLoading(false);
+            setDeleteLoading(false);
         }
-    }, [currentVideoId, onRefresh]);
-
-    const statusHint = useMemo(() => {
-        if (!currentStatus) {
-            return "Aucune vidéo. Initialise un upload pour associer une vidéo à ce chapitre.";
-        }
-
-        if (currentStatus === "PENDING") {
-            return "Vidéo en attente : upload non confirmé ou en cours de reprise.";
-        } else if (currentStatus === "UPLOADED") {
-            return "Upload terminé côté provider. En attente de traitement.";
-        } else if (currentStatus === "PROCESSING") {
-            return "Traitement en cours côté Vimeo. Le backend poll automatiquement.";
-        } else if (currentStatus === "IN_REVIEW") {
-            return "Vimeo demande une revue (privacy / contenus).";
-        } else if (currentStatus === "READY") {
-            return "Vidéo prête. Prévisualisation disponible.";
-        } else if (currentStatus === "PUBLISHED") {
-            return "Vidéo publiée.";
-        } else if (currentStatus === "FAILED") {
-            return "Traitement échoué.";
-        } else if (currentStatus === "REJECTED") {
-            return "Vidéo rejetée.";
-        } else if (currentStatus === "EXPIRED") {
-            return "Session d’upload expirée. Réinitialise l’upload.";
-        } else {
-            return "État vidéo inconnu.";
-        }
-    }, [currentStatus]);
-
-    const reviewMessage = useMemo(() => {
-        if (currentStatus === "IN_REVIEW") {
-            return "Vimeo a mis la vidéo en revue. Vérifie les paramètres privacy et les restrictions d’intégration.";
-        } else {
-            return null;
-        }
-    }, [currentStatus]);
-
-    const canPublish = useMemo(() => {
-        if (!currentStatus) {
-            return false;
-        }
-
-        if (currentStatus === "READY") {
-            return true;
-        } else if (currentStatus === "IN_REVIEW") {
-            return false;
-        } else if (currentStatus === "PUBLISHED") {
-            return false;
-        } else {
-            return false;
-        }
-    }, [currentStatus]);
+    }
 
     return (
-        <Card>
-            <CardHeader className="space-y-1">
-                <CardTitle className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                        <div className="truncate">{chapterTitle ?? "Video"}</div>
-                        <div className="text-xs font-normal text-muted-foreground">
-                            Chapter: {chapterId}
-                        </div>
+        <div className={cn("rounded-lg border bg-card p-4", className)}>
+            {/* VIEWER */}
+            <div className="space-y-3">
+                <div className="flex items-start justify-between gap-4">
+                    <div>
+                        <h3 className="text-sm font-semibold">Viewer</h3>
+                        <p className="text-xs text-muted-foreground">
+                            Statut vidéo : <span className="font-medium text-foreground">{status}</span>
+                        </p>
                     </div>
 
-                    <Badge variant={statusBadgeVariant(currentStatus)}>
-                        {formatStatusLabel(currentStatus)}
-                    </Badge>
-                </CardTitle>
-            </CardHeader>
-
-            <CardContent className="space-y-4">
-                <div className="text-sm text-muted-foreground">{statusHint}</div>
-
-                {/* Preview */}
-                {canPreview(currentStatus) && sourceUri && derivedVimeoId ? (
-                    <div className="space-y-2">
-                        <div className="text-xs text-muted-foreground">Prévisualisation</div>
-                        <VimeoPlayer
-                            sourceUri={sourceUri}
-                            embedHash={embedHash}
-                            thumbnailUrl={thumbnailUrl}
-                            minimalUi={true}
-                            autoplay={false}
-                        />
-                    </div>
-                ) : null}
-
-                {reviewMessage ? (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                        {reviewMessage}
-                    </div>
-                ) : null}
-
-                <div className="space-y-2 rounded-lg border p-3">
-                    <div className="text-sm font-medium">Upload</div>
-
-                    <div className="grid gap-2">
-                        <Label htmlFor="videoFile">Fichier vidéo</Label>
-                        <Input
-                            id="videoFile"
-                            type="file"
-                            accept="video/*"
-                            onChange={onPickFile}
-                        />
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                        <Button
-                            type="button"
-                            onClick={onInitUpload}
-                            disabled={
-                                !file ||
-                                uploadState.kind === "initializing" ||
-                                uploadState.kind === "uploading" ||
-                                uploadState.kind === "confirming"
-                            }
-                        >
-                            Init + Upload + Confirm
-                        </Button>
-
-                        {canPublish ? (
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                onClick={onPublish}
-                                disabled={publishLoading}
-                            >
-                                {publishLoading ? "Publishing..." : "Publish"}
-                            </Button>
-                        ) : (
-                            <Button type="button" variant="secondary" disabled={true}>
-                                Publish
-                            </Button>
-                        )}
-
+                    {isReady ? (
                         <Button
                             type="button"
                             variant="outline"
-                            onClick={() => {
-                                stopCurrentUpload();
-                                setUploadState({kind: "idle"});
-                                setInitResult(null);
-                                setFile(null);
-                            }}
+                            size="sm"
+                            onClick={() => setPreviewEnabled(true)}
+                            disabled={previewEnabled}
+                            title="Load and display the Vimeo player"
                         >
-                            Reset
+                            Voir la vidéo
                         </Button>
-                    </div>
+                    ) : null}
+                </div>
 
-                    <div className="text-sm text-muted-foreground">
-                        {uploadState.kind === "idle" ? (
-                            <div>En attente.</div>
-                        ) : null}
-
-                        {uploadState.kind === "initializing" ? (
-                            <div>INIT en cours…</div>
-                        ) : null}
-
-                        {uploadState.kind === "uploading" ? (
-                            <div>Upload en cours… {uploadState.percent}%</div>
-                        ) : null}
-
-                        {uploadState.kind === "confirming" ? (
-                            <div>CONFIRM en cours…</div>
-                        ) : null}
-
-                        {uploadState.kind === "done" ? (
-                            <div>Upload terminé. Rafraîchis le cours si besoin.</div>
-                        ) : null}
-
-                        {uploadState.kind === "error" ? (
-                            <div className="text-destructive">Erreur: {uploadState.message}</div>
-                        ) : null}
-                    </div>
-
-                    <div className="space-y-1 text-xs text-muted-foreground">
-                        <div>VideoId: {currentVideoId ?? "-"}</div>
-                        <div>SourceUri: {sourceUri ?? "-"}</div>
-                        <div>VimeoId: {derivedVimeoId ?? "-"}</div>
-                        <div>EmbedHash: {embedHash ?? "-"}</div>
+                {/* Fixed-size frame: same dimensions for thumbnail/black/player */}
+                <div className="w-full">
+                    <div className="w-full overflow-hidden rounded-lg border bg-black">
+                        <div className="aspect-video w-full">
+                            {/* Content must always fill the fixed frame */}
+                            {isReady ? (
+                                <>
+                                    {!previewEnabled ? (
+                                        <>
+                                            {video?.thumbnailUrl ? (
+                                                <img
+                                                    src={video.thumbnailUrl}
+                                                    alt="Video thumbnail"
+                                                    className="h-full w-full object-cover"
+                                                />
+                                            ) : (
+                                                <div
+                                                    className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
+                                                    Preview disponible. Clique sur <span
+                                                    className="ml-1 font-medium text-foreground">Voir la vidéo</span>.
+                                                </div>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <>
+                                            {sourceUri ? (
+                                                <div className="h-full w-full">
+                                                    <VimeoPlayer
+                                                        sourceUri={sourceUri}
+                                                        embedHash={video?.embedHash ?? null}
+                                                        thumbnailUrl={video?.thumbnailUrl ?? null}
+                                                        minimalUi={true}
+                                                        autoplay={false}
+                                                        onError={(msg) => {
+                                                            setMessage(msg);
+                                                        }}
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <div
+                                                    className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
+                                                    Vidéo READY mais sourceUri introuvable.
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                </>
+                            ) : (
+                                <div
+                                    className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
+                                    {status === "PROCESSING" || status === "PENDING"
+                                        ? "Traitement en cours. L’upload est verrouillé."
+                                        : "Aucune vidéo prête. Upload requis."}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
-            </CardContent>
-        </Card>
+
+                {!previewEnabled && isReady ? (
+                    <div className="text-xs text-muted-foreground">
+                        Preview disponible. Clique sur <span
+                        className="font-medium text-foreground">Voir la vidéo</span>.
+                    </div>
+                ) : null}
+            </div>
+
+            <Separator className="my-4"/>
+
+            {/* UPLOAD */}
+            <div className="space-y-3">
+                <div className="flex items-start justify-between gap-4">
+                    <div>
+                        <h3 className="text-sm font-semibold">Upload</h3>
+                        <p className="text-xs text-muted-foreground">
+                            Upload = init + TUS + confirm automatique. Pas de bouton confirm.
+                        </p>
+                    </div>
+
+                    <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={handleDeleteVideo}
+                        disabled={!canDelete}
+                    >
+                        Delete
+                    </Button>
+                </div>
+
+                <div className="space-y-2">
+                    <div className="text-xs font-medium">Fichier vidéo</div>
+                    <Input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="video/*"
+                        onChange={onPickFile}
+                        disabled={isBusy || isProcessingOrPending}
+                    />
+                    {isProcessingOrPending ? (
+                        <div className="text-xs text-muted-foreground">
+                            Upload bloqué : une vidéo est déjà en cours de traitement (PENDING/PROCESSING).
+                        </div>
+                    ) : null}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                    <Button onClick={handleUploadAll} disabled={!canUpload}>
+                        {uploadLoading ? "Uploading..." : "Upload"}
+                    </Button>
+
+                    <Button variant="outline" onClick={handleResetLocal} disabled={isBusy}>
+                        Reset
+                    </Button>
+                </div>
+
+                <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Progress</span>
+                        <span className="tabular-nums">{progressPct}%</span>
+                    </div>
+                    <Progress value={progressPct}/>
+                </div>
+
+                <div className="text-sm text-muted-foreground">{message}</div>
+            </div>
+        </div>
     );
 }

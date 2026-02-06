@@ -1,14 +1,15 @@
-import * as React from "react";
-import {createContext, useCallback, useContext, useEffect, useMemo, useState} from "react";
+import {createContext, useCallback, useContext, useEffect, useMemo, useRef, useState} from "react";
 import {NavLink, Outlet, useLocation, useParams} from "react-router-dom";
-import api from "@/api/axios.ts";
-import {Loader2, Save} from "lucide-react";
+import {courseService} from "@/api/services";
+import {CourseStatus} from "@/api/types/course";
+import {Loader2, Save, Send} from "lucide-react";
 import {VideoResponse} from "@/types/video.ts";
 import {Button} from "@/components/ui/button.tsx";
 import {Card} from "@/components/ui/card.tsx";
 import {Badge} from "@/components/ui/badge.tsx";
 import {cn} from "@/lib/utils.ts";
-import {TooltipProvider} from "@/components/ui/tooltip.tsx";
+import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from "@/components/ui/tooltip";
+import {toast} from "sonner";
 
 type ChapterResponse = {
     id: string;
@@ -31,18 +32,11 @@ type SectionResponse = {
     updatedAt?: string | null;
 };
 
-type CourseStatusEnum =
-    | "DRAFT"
-    | "WAITING_VALIDATION"
-    | "VALIDATED"
-    | "REJECTED"
-    | "PUBLISHED";
-
 export type CourseResponse = {
     id: string;
     title: string;
     description: string;
-    status: CourseStatusEnum;
+    status: CourseStatus;
     price?: number | null;
     sections: SectionResponse[];
     createdAt?: string | null;
@@ -72,10 +66,17 @@ type UpdateChapterRequest = {
 
 type CourseBuilderContextValue = {
     courseId: string;
+
     course: CourseResponse | null;
-    setCourse: React.Dispatch<React.SetStateAction<CourseResponse | null>>;
+    setCourse: (value: CourseResponse | null | ((prev: CourseResponse | null) => CourseResponse | null)) => void;
+
+    // Selection: single source of truth for the chapter currently displayed in the viewer.
+    selectedChapterId: string | null;
+    setSelectedChapterId: (value: string | null | ((prev: string | null) => string | null)) => void;
+
     loading: boolean;
     saving: boolean;
+
     refreshCourse: () => Promise<void>;
     saveCourse: (partial: Partial<CourseResponse>) => Promise<CourseResponse | null>;
 };
@@ -91,6 +92,146 @@ export function useCourseBuilder(): CourseBuilderContextValue {
     return ctx;
 }
 
+type PublishGate = {
+    totalChapters: number;
+    readyVideos: number;
+    missingVideoChapters: number;
+    notReadyVideos: number;
+    canPublish: boolean;
+};
+
+function isClientKey(id: string | null | undefined): boolean {
+    const value = (id ?? "").trim();
+    return value.startsWith("client:");
+}
+
+function hasProcessingVideo(course: CourseResponse | null): boolean {
+    if (!course) {
+        return false;
+    }
+
+    for (const section of course.sections ?? []) {
+        for (const chapter of section.chapters ?? []) {
+            const status = chapter.video?.status ?? null;
+            if (status === "PROCESSING") {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+function getCourseStatusLabel(status: CourseStatus): string {
+    if (status === "DRAFT") {
+        return "Brouillon";
+    }
+    if (status === "WAITING_VALIDATION") {
+        return "En attente de validation";
+    }
+    if (status === "VALIDATED") {
+        return "Validé";
+    }
+    if (status === "REJECTED") {
+        return "Rejeté";
+    }
+    if (status === "PUBLISHED") {
+        return "Publié";
+    }
+    return status;
+}
+
+function computePublishGate(course: CourseResponse | null): PublishGate {
+    const result: PublishGate = {
+        totalChapters: 0,
+        readyVideos: 0,
+        missingVideoChapters: 0,
+        notReadyVideos: 0,
+        canPublish: false,
+    };
+
+    if (!course) {
+        return result;
+    }
+
+    for (const section of course.sections ?? []) {
+        for (const chapter of section.chapters ?? []) {
+            result.totalChapters += 1;
+
+            const video = chapter.video ?? null;
+            if (!video) {
+                result.missingVideoChapters += 1;
+                continue;
+            }
+
+            if (video.status === "READY") {
+                result.readyVideos += 1;
+            } else {
+                result.notReadyVideos += 1;
+            }
+        }
+    }
+
+    if (course.status === "WAITING_VALIDATION") {
+        return result;
+    }
+
+    if (result.totalChapters <= 0) {
+        return result;
+    }
+
+    if (result.missingVideoChapters > 0) {
+        return result;
+    }
+
+    if (result.notReadyVideos > 0) {
+        return result;
+    }
+
+    result.canPublish = result.readyVideos === result.totalChapters;
+    return result;
+}
+
+function getPublishTooltipText(args: Readonly<{
+    course: CourseResponse | null;
+    isWaitingValidation: boolean;
+    processingLock: boolean;
+    gate: PublishGate;
+}>): string {
+    if (!args.course) {
+        return "Chargement du cours...";
+    }
+
+    if (args.isWaitingValidation) {
+        return "Ce cours est en attente de validation : édition et publication bloquées.";
+    }
+
+    if (args.processingLock) {
+        return "Une vidéo est en PROCESSING : sauvegarde et modification de structure bloquées (upload vidéo toujours possible sur chapitres déjà enregistrés).";
+    }
+
+    if (args.gate.totalChapters <= 0) {
+        return "Ajoute au moins un chapitre avant de soumettre le cours.";
+    }
+
+    if (args.gate.missingVideoChapters > 0) {
+        return `${args.gate.readyVideos}/${args.gate.totalChapters} vidéos prêtes — ${args.gate.missingVideoChapters} chapitre(s) sans vidéo.`;
+    }
+
+    if (args.gate.notReadyVideos > 0) {
+        return `${args.gate.readyVideos}/${args.gate.totalChapters} vidéos prêtes — ${args.gate.notReadyVideos} vidéo(s) en cours / en échec.`;
+    }
+
+    return "Soumettre le cours à la procédure de validation interne.";
+}
+
+function getErrorMessage(err: unknown): string {
+    if (err instanceof Error && err.message.trim().length > 0) {
+        return err.message;
+    }
+    return "Erreur inconnue.";
+}
+
 export default function CourseBuilderLayout() {
     const {courseId} = useParams();
     const location = useLocation();
@@ -98,25 +239,61 @@ export default function CourseBuilderLayout() {
     const resolvedCourseId = courseId ?? "";
 
     const [course, setCourse] = useState<CourseResponse | null>(null);
-    // IMPORTANT: keep the Outlet mounted.
-    // "loading" is only for the FIRST fetch (course=null).
-    // Background refreshes (polling, manual refresh) DO NOT change loading state,
-    // otherwise the Outlet unmounts/remounts and triggers an infinite refresh loop.
+
     const [loading, setLoading] = useState<boolean>(true);
     const [saving, setSaving] = useState<boolean>(false);
+    const [publishing, setPublishing] = useState<boolean>(false);
+
+    const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
+
+    const hasFetchedOnceRef = useRef<boolean>(false);
 
     const activeTab = useMemo(() => {
         const path = location.pathname;
         if (path.endsWith("/sections")) {
             return "sections";
-        } else if (path.endsWith("/resources")) {
-            return "resources";
-        } else if (path.endsWith("/settings")) {
-            return "settings";
-        } else {
-            return "edit";
         }
+        if (path.endsWith("/resources")) {
+            return "resources";
+        }
+        if (path.endsWith("/settings")) {
+            return "settings";
+        }
+        return "edit";
     }, [location.pathname]);
+
+    const isWaitingValidation = useMemo(() => {
+        return course?.status === "WAITING_VALIDATION";
+    }, [course?.status]);
+
+    const processingLock = useMemo(() => {
+        return hasProcessingVideo(course);
+    }, [course]);
+
+    // Lock: prevents PUT save & prevents publish.
+    // Upload remains allowed at ChapterVideoPanel level (persisted chapters).
+    const structureLocked = useMemo(() => {
+        return Boolean(isWaitingValidation) || Boolean(processingLock);
+    }, [isWaitingValidation, processingLock]);
+
+    const isEditable = useMemo(() => {
+        return !!course && course.status !== "WAITING_VALIDATION";
+    }, [course]);
+
+    const publishGate = useMemo(() => {
+        return computePublishGate(course);
+    }, [course]);
+
+    const publishTooltipText = useMemo(() => {
+        return getPublishTooltipText({course, isWaitingValidation, processingLock, gate: publishGate});
+    }, [course, isWaitingValidation, processingLock, publishGate]);
+
+    const courseStatusLabel = useMemo(() => {
+        if (!course) {
+            return "";
+        }
+        return getCourseStatusLabel(course.status);
+    }, [course]);
 
     const refreshCourse = useCallback(async (): Promise<void> => {
         if (!resolvedCourseId) {
@@ -125,23 +302,15 @@ export default function CourseBuilderLayout() {
             return;
         }
 
-        // Use functional update to avoid depending on `course` in useCallback deps.
-        // This prevents infinite loops: refreshCourse reference stays stable across renders.
-        setCourse((prevCourse) => {
-            // Set loading state only on first fetch (when prevCourse is null)
-            if (prevCourse === null) {
-                setLoading(true);
-            }
-            // For subsequent refreshes (polling, manual), keep the UI mounted by NOT changing loading state
-            return prevCourse;
-        });
+        if (!hasFetchedOnceRef.current) {
+            setLoading(true);
+        }
 
         try {
-            // IMPORTANT: axios baseURL already contains "/api".
-            // So routes MUST NOT start with "/api".
-            const res = await api.get(`/course/${resolvedCourseId}`);
-            setCourse(res.data as CourseResponse);
+            const course = await courseService.getCourseById(resolvedCourseId);
+            setCourse(course as CourseResponse);
         } finally {
+            hasFetchedOnceRef.current = true;
             setLoading(false);
         }
     }, [resolvedCourseId]);
@@ -157,13 +326,8 @@ export default function CourseBuilderLayout() {
             req.description = partial.description ?? null;
         }
 
-        // Free course: price can be 0. Null/undefined means "no update" or "unset in UI".
         if (partial.price !== undefined) {
-            if (partial.price === null || partial.price === undefined) {
-                req.price = null;
-            } else {
-                req.price = Number(partial.price);
-            }
+            req.price = partial.price === null || partial.price === undefined ? null : Number(partial.price);
         }
 
         if (partial.sections !== undefined) {
@@ -171,18 +335,28 @@ export default function CourseBuilderLayout() {
                 req.sections = null;
             } else {
                 req.sections = (partial.sections ?? []).map((s) => {
-                    return {
-                        id: s.id ?? null,
+                    const section: UpdateSectionRequest = {
                         title: s.title ?? null,
                         position: (s as SectionResponse).position ?? null,
                         chapters: ((s as SectionResponse).chapters ?? []).map((c) => {
-                            return {
-                                id: c.id ?? null,
+                            const chapter: UpdateChapterRequest = {
                                 title: c.title ?? null,
                                 position: c.position ?? null,
                             };
+
+                            if (c.id && c.id.trim().length > 0 && !isClientKey(c.id)) {
+                                chapter.id = c.id;
+                            }
+
+                            return chapter;
                         }),
                     };
+
+                    if (s.id && s.id.trim().length > 0 && !isClientKey(s.id)) {
+                        section.id = s.id;
+                    }
+
+                    return section;
                 });
             }
         }
@@ -195,17 +369,31 @@ export default function CourseBuilderLayout() {
             return null;
         }
 
+        if (!course) {
+            return null;
+        }
+
+        if (isWaitingValidation) {
+            toast.error("Ce cours est en attente de validation : modification bloquée.");
+            return course;
+        }
+
+        if (processingLock) {
+            toast.error("Sauvegarde bloquée : une vidéo est en PROCESSING. Attendez la fin du traitement.");
+            return course;
+        }
+
+        if (!isEditable) {
+            toast.error("Modification bloquée.");
+            return course;
+        }
+
         setSaving(true);
         try {
             const payload = mapPartialToUpdateRequest(partial);
-
-            // IMPORTANT: axios baseURL already contains "/api".
-            // So routes MUST NOT start with "/api".
-            const res = await api.put(`/course/${resolvedCourseId}`, payload);
-
-            const updated = res.data as CourseResponse;
-            setCourse(updated);
-            return updated;
+            const updated = await courseService.updateCourse(resolvedCourseId, payload);
+            setCourse(updated as CourseResponse);
+            return updated as CourseResponse;
         } finally {
             setSaving(false);
         }
@@ -216,11 +404,69 @@ export default function CourseBuilderLayout() {
             return;
         }
 
-        // Persist ONLY what is impacted by the builder right now (ordering + titles if updated later)
         await saveCourse({sections: course.sections});
     }
 
+    async function handlePublishCourse(): Promise<void> {
+        if (!resolvedCourseId) {
+            return;
+        }
+
+        if (!course) {
+            return;
+        }
+
+        if (isWaitingValidation) {
+            toast.error("Ce cours est déjà en attente de validation.");
+            return;
+        }
+
+        if (processingLock) {
+            toast.error("Publication bloquée : une vidéo est en PROCESSING.");
+            return;
+        }
+
+        if (!publishGate.canPublish) {
+            if (publishGate.totalChapters <= 0) {
+                toast.error("Publication impossible : le cours ne contient aucun chapitre.");
+                return;
+            }
+
+            if (publishGate.missingVideoChapters > 0) {
+                toast.error(`Publication impossible : ${publishGate.missingVideoChapters} chapitre(s) sans vidéo.`);
+                return;
+            }
+
+            if (publishGate.notReadyVideos > 0) {
+                toast.error(`Publication impossible : ${publishGate.notReadyVideos} vidéo(s) ne sont pas prêtes.`);
+                return;
+            }
+
+            toast.error("Publication impossible : toutes les vidéos doivent être prêtes.");
+            return;
+        }
+
+        setPublishing(true);
+        try {
+            const updated = await courseService.publishCourse(resolvedCourseId);
+            setCourse(updated as CourseResponse);
+
+            if (updated.status === "WAITING_VALIDATION") {
+                toast.success("Cours soumis à validation. Édition bloquée jusqu'à décision.");
+            } else {
+                toast.success("Cours soumis.");
+            }
+        } catch (err: unknown) {
+            toast.error(`Soumission échouée : ${getErrorMessage(err)}`);
+        } finally {
+            setPublishing(false);
+        }
+    }
+
     useEffect(() => {
+        setSelectedChapterId(null);
+        hasFetchedOnceRef.current = false;
+
         void refreshCourse();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [resolvedCourseId]);
@@ -230,12 +476,14 @@ export default function CourseBuilderLayout() {
             courseId: resolvedCourseId,
             course,
             setCourse,
+            selectedChapterId,
+            setSelectedChapterId,
             loading,
             saving,
             refreshCourse,
             saveCourse,
         };
-    }, [resolvedCourseId, course, loading, saving, refreshCourse]);
+    }, [resolvedCourseId, course, selectedChapterId, loading, saving, refreshCourse, saveCourse]);
 
     if (!resolvedCourseId) {
         return (
@@ -253,58 +501,91 @@ export default function CourseBuilderLayout() {
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                             <div className="flex flex-wrap items-center gap-2">
                                 <TabLink to="edit" label="Informations" active={activeTab === "edit"}/>
-                                <TabLink
-                                    to="sections"
-                                    label="Sections & chapitres"
-                                    active={activeTab === "sections"}
-                                />
-                                <TabLink
-                                    to="resources"
-                                    label="Ressources"
-                                    active={activeTab === "resources"}
-                                />
-                                <TabLink
-                                    to="settings"
-                                    label="Paramètres"
-                                    active={activeTab === "settings"}
-                                />
+                                <TabLink to="sections" label="Sections & chapitres" active={activeTab === "sections"}/>
+                                <TabLink to="resources" label="Ressources" active={activeTab === "resources"}/>
+                                <TabLink to="settings" label="Paramètres" active={activeTab === "settings"}/>
                             </div>
 
                             <div className="ml-auto flex items-center gap-3">
                                 {course ? (
                                     <Badge variant="outline" className="rounded-full px-3 py-1 text-xs font-semibold">
-                                        {course.status}
+                                        {courseStatusLabel}
                                     </Badge>
                                 ) : null}
 
-                                <Button
-                                    size="sm"
-                                    onClick={() => void handleSaveCourse()}
-                                    disabled={loading || saving || !course}
-                                    className="h-9 rounded-lg"
-                                >
-                                    {saving ? (
-                                        <>
-                                            <Loader2 className="mr-2 h-4 w-4 animate-spin"/>
-                                            Saving
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Save className="mr-2 h-4 w-4"/>
-                                            Save course
-                                        </>
-                                    )}
-                                </Button>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <span>
+                                            <Button
+                                                size="sm"
+                                                onClick={() => void handlePublishCourse()}
+                                                disabled={
+                                                    loading ||
+                                                    saving ||
+                                                    publishing ||
+                                                    !course ||
+                                                    structureLocked ||
+                                                    !publishGate.canPublish
+                                                }
+                                                className="h-9 rounded-lg"
+                                            >
+                                                {publishing ? (
+                                                    <>
+                                                        <Loader2 className="mr-2 h-4 w-4 animate-spin"/>
+                                                        Publication...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Send className="mr-2 h-4 w-4"/>
+                                                        Publier
+                                                    </>
+                                                )}
+                                            </Button>
+                                        </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <span>{publishTooltipText}</span>
+                                    </TooltipContent>
+                                </Tooltip>
+
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <span>
+                                            <Button
+                                                size="sm"
+                                                onClick={() => void handleSaveCourse()}
+                                                disabled={loading || saving || publishing || !course || structureLocked || !isEditable}
+                                                className="h-9 rounded-lg"
+                                            >
+                                                {saving ? (
+                                                    <>
+                                                        <Loader2 className="mr-2 h-4 w-4 animate-spin"/>
+                                                        Enregistrement...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Save className="mr-2 h-4 w-4"/>
+                                                        Enregistrer
+                                                    </>
+                                                )}
+                                            </Button>
+                                        </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <span>
+                                            {structureLocked
+                                                ? (isWaitingValidation
+                                                    ? "En attente de validation : sauvegarde bloquée."
+                                                    : "Vidéo en PROCESSING : sauvegarde bloquée temporairement.")
+                                                : "Sauvegarder les modifications du cours."}
+                                        </span>
+                                    </TooltipContent>
+                                </Tooltip>
                             </div>
                         </div>
                     </Card>
 
                     <div className="mt-6">
-                        {/*
-                          Keep the Outlet mounted.
-                          If we unmount it during background refreshes, hooks like useCoursePolling re-mount and
-                          immediately call refreshCourse again, causing a tight refresh loop.
-                        */}
                         {loading && course === null ? (
                             <div className="flex h-[55vh] items-center justify-center">
                                 <Loader2 className="h-6 w-6 animate-spin"/>
@@ -319,7 +600,7 @@ export default function CourseBuilderLayout() {
     );
 }
 
-function TabLink(props: { to: string; label: string; active: boolean }) {
+function TabLink(props: Readonly<{ to: string; label: string; active: boolean }>) {
     return (
         <Button
             variant={props.active ? "secondary" : "ghost"}

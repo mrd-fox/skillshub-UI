@@ -1,9 +1,9 @@
-// cypress/e2e/course-builder-locks.cy.ts
+// cypress/e2e/update-course-payload.cy.ts
 /// <reference types="cypress" />
 
 import type {AuthMeResponse, CourseResponse, InternalUserEnvelope,} from "../support/cypress-types";
 
-function mockAuthAsTutor() {
+function mockAuthAsTutor(): void {
     const auth: AuthMeResponse = {
         id: "auth-user-123",
         email: "tutor@test.com",
@@ -23,24 +23,14 @@ function mockAuthAsTutor() {
         },
     };
 
-    cy.intercept("GET", "**/auth/me", {
-        statusCode: 200,
-        body: auth,
-    }).as("authMe");
-
-    cy.intercept("GET", "**/users/me", {
-        statusCode: 200,
-        body: envelope,
-    }).as("usersMe");
+    cy.intercept("GET", "**/auth/me", {statusCode: 200, body: auth}).as("authMe");
+    cy.intercept("GET", "**/users/me", {statusCode: 200, body: envelope}).as("usersMe");
 }
 
-function visitSections(courseId: string, course: CourseResponse) {
-    cy.intercept("GET", `**/course/${courseId}`, {
-        statusCode: 200,
-        body: course,
-    }).as("getCourse");
+function visitSections(courseId: string, course: CourseResponse): void {
+    cy.intercept("GET", `**/course/${courseId}`, {statusCode: 200, body: course}).as("getCourse");
 
-    // Mutations are intercepted to guarantee CI safety and to assert "no mutation" when locked
+    // Mutations are intercepted to guarantee CI safety and to assert "no mutation" when locked.
     cy.intercept("PUT", `**/course/${courseId}`, (req) => {
         req.reply({statusCode: 200, body: course});
     }).as("putCourse");
@@ -56,12 +46,37 @@ function visitSections(courseId: string, course: CourseResponse) {
     cy.wait("@getCourse");
 }
 
-function openSectionAccordionByTitle(sectionTitle: string) {
+function openSectionAccordionByTitle(sectionTitle: string): void {
     // SectionItem renders the title like: "{index + 1}. {section.title}"
     // We click the visible header to open AccordionContent.
     cy.contains(new RegExp(`\\b${sectionTitle}\\b`, "i"))
         .should("be.visible")
         .click();
+}
+
+function assertGlobalActionsLocked(): void {
+    cy.contains("button", "Enregistrer").should("be.disabled");
+    cy.contains("button", "Publier").should("be.disabled");
+}
+
+function assertStructureSidebarLocked(): void {
+    cy.contains("button", "+ Ajouter une section").should("be.disabled");
+}
+
+function assertAddChapterLockedInSection(sectionTitle: string): void {
+    // "+ Ajouter un chapitre" is inside AccordionContent -> open the section first.
+    openSectionAccordionByTitle(sectionTitle);
+    cy.contains("button", "+ Ajouter un chapitre").should("be.disabled");
+}
+
+function assertNoMutations(): void {
+    cy.get("@putCourse.all").should("have.length", 0);
+    cy.get("@publishCourse.all").should("have.length", 0);
+}
+
+function openChapterInSidebar(chapterTitle: string): void {
+    // ChapterItem is rendered as a button in the left sidebar list.
+    cy.contains("button", chapterTitle).should("be.visible").click();
 }
 
 describe("Course Builder Locks (WAITING_VALIDATION / PROCESSING)", () => {
@@ -99,20 +114,10 @@ describe("Course Builder Locks (WAITING_VALIDATION / PROCESSING)", () => {
 
         visitSections(courseId, course);
 
-        // Global actions locked
-        cy.contains("button", "Enregistrer").should("be.disabled");
-        cy.contains("button", "Publier").should("be.disabled");
-
-        // Sidebar structure actions locked (always visible)
-        cy.contains("button", "+ Ajouter une section").should("be.disabled");
-
-        // "+ Ajouter un chapitre" is inside AccordionContent -> open the section first
-        openSectionAccordionByTitle("Section 1");
-        cy.contains("button", "+ Ajouter un chapitre").should("be.disabled");
-
-        // Ensure no mutation calls happened
-        cy.get("@putCourse.all").should("have.length", 0);
-        cy.get("@publishCourse.all").should("have.length", 0);
+        assertGlobalActionsLocked();
+        assertStructureSidebarLocked();
+        assertAddChapterLockedInSection("Section 1");
+        assertNoMutations();
     });
 
     it("should block structure + save + publish when at least one video is PROCESSING (upload allowed only for persisted chapters)", () => {
@@ -149,26 +154,16 @@ describe("Course Builder Locks (WAITING_VALIDATION / PROCESSING)", () => {
 
         visitSections(courseId, course);
 
-        // Global actions locked
-        cy.contains("button", "Enregistrer").should("be.disabled");
-        cy.contains("button", "Publier").should("be.disabled");
+        assertGlobalActionsLocked();
+        assertStructureSidebarLocked();
+        assertAddChapterLockedInSection("Section 1");
+        assertNoMutations();
 
-        // Sidebar structure actions locked (always visible)
-        cy.contains("button", "+ Ajouter une section").should("be.disabled");
-
-        // "+ Ajouter un chapitre" is inside AccordionContent -> open the section first
-        openSectionAccordionByTitle("Section 1");
-        cy.contains("button", "+ Ajouter un chapitre").should("be.disabled");
-
-        // Ensure no mutation calls happened
-        cy.get("@putCourse.all").should("have.length", 0);
-        cy.get("@publishCourse.all").should("have.length", 0);
-
-        // Upload behavior checks (kept resilient, based on visible UX text)
-        cy.contains("button", "Persisted chapter (processing)").click();
+        // Upload behavior checks (kept resilient, based on visible UX text).
+        openChapterInSidebar("Persisted chapter (processing)");
         cy.contains(/upload|téléverser|uploader/i).should("exist");
 
-        cy.contains("button", "Client chapter (unsaved)").click();
+        openChapterInSidebar("Client chapter (unsaved)");
         cy.contains(/L’upload vidéo est désactivé tant que le cours n’est pas sauvegardé/i).should("exist");
     });
 });

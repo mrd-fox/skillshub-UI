@@ -128,6 +128,7 @@ export default function SectionItem({
                         type="button"
                         variant="ghost"
                         size="icon"
+                        data-cy="delete-section"
                         className="h-7 w-7 text-destructive hover:text-destructive"
                         disabled={readOnly}
                         aria-label="Delete section"
@@ -207,6 +208,7 @@ export default function SectionItem({
                     <Button
                         type="button"
                         variant="outline"
+                        data-cy="add-chapter"
                         className="w-full border-dashed text-muted-foreground hover:text-primary"
                         disabled={readOnly}
                         onClick={() => onAddChapter(section.id)}

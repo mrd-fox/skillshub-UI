@@ -9,6 +9,16 @@ import {Card} from "@/components/ui/card.tsx";
 import {Badge} from "@/components/ui/badge.tsx";
 import {cn} from "@/lib/utils.ts";
 import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from "@/components/ui/tooltip";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog.tsx";
 import {toast} from "sonner";
 
 type ChapterResponse = {
@@ -76,6 +86,10 @@ type CourseBuilderContextValue = {
 
     loading: boolean;
     saving: boolean;
+
+    // Dirty tracking for structure edits
+    structureDirty: boolean;
+    markStructureDirty: () => void;
 
     refreshCourse: () => Promise<void>;
     saveCourse: (partial: Partial<CourseResponse>) => Promise<CourseResponse | null>;
@@ -232,6 +246,13 @@ function getErrorMessage(err: unknown): string {
     return "Erreur inconnue.";
 }
 
+// Snapshot type for meta fields
+type CourseMetaSnapshot = {
+    title: string;
+    description: string;
+    price: number | null;
+};
+
 export default function CourseBuilderLayout() {
     const {courseId} = useParams();
     const location = useLocation();
@@ -239,12 +260,19 @@ export default function CourseBuilderLayout() {
     const resolvedCourseId = courseId ?? "";
 
     const [course, setCourse] = useState<CourseResponse | null>(null);
+    const [metaSnapshot, setMetaSnapshot] = useState<CourseMetaSnapshot | null>(null);
+    const [hadSectionsSnapshot, setHadSectionsSnapshot] = useState<boolean>(false);
+    const [structureDirty, setStructureDirty] = useState<boolean>(false);
 
     const [loading, setLoading] = useState<boolean>(true);
     const [saving, setSaving] = useState<boolean>(false);
     const [publishing, setPublishing] = useState<boolean>(false);
 
     const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
+
+    // Confirmation modal state for delete-all sections
+    const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState<boolean>(false);
+    const [pendingSavePayload, setPendingSavePayload] = useState<UpdateCourseRequest | null>(null);
 
     const hasFetchedOnceRef = useRef<boolean>(false);
 
@@ -266,6 +294,10 @@ export default function CourseBuilderLayout() {
         return course?.status === "WAITING_VALIDATION";
     }, [course?.status]);
 
+    const isPublished = useMemo(() => {
+        return course?.status === "PUBLISHED";
+    }, [course?.status]);
+
     const processingLock = useMemo(() => {
         return hasProcessingVideo(course);
     }, [course]);
@@ -273,16 +305,42 @@ export default function CourseBuilderLayout() {
     // Lock: prevents PUT save & prevents publish.
     // Upload remains allowed at ChapterVideoPanel level (persisted chapters).
     const structureLocked = useMemo(() => {
-        return Boolean(isWaitingValidation) || Boolean(processingLock);
-    }, [isWaitingValidation, processingLock]);
+        return Boolean(isWaitingValidation) || Boolean(isPublished) || Boolean(processingLock);
+    }, [isWaitingValidation, isPublished, processingLock]);
 
     const isEditable = useMemo(() => {
-        return !!course && course.status !== "WAITING_VALIDATION";
+        if (!course) {
+            return false;
+        }
+        if (course.status === "WAITING_VALIDATION") {
+            return false;
+        }
+        if (course.status === "PUBLISHED") {
+            return false;
+        }
+        return true;
     }, [course]);
 
     const publishGate = useMemo(() => {
         return computePublishGate(course);
     }, [course]);
+
+    // Compute if meta fields have changed from snapshot
+    const metaDirty = useMemo(() => {
+        if (!course || !metaSnapshot) {
+            return false;
+        }
+        if (course.title !== metaSnapshot.title) {
+            return true;
+        }
+        if (course.description !== metaSnapshot.description) {
+            return true;
+        }
+        if (course.price !== metaSnapshot.price) {
+            return true;
+        }
+        return false;
+    }, [course, metaSnapshot]);
 
     const publishTooltipText = useMemo(() => {
         return getPublishTooltipText({course, isWaitingValidation, processingLock, gate: publishGate});
@@ -298,6 +356,8 @@ export default function CourseBuilderLayout() {
     const refreshCourse = useCallback(async (): Promise<void> => {
         if (!resolvedCourseId) {
             setCourse(null);
+            setMetaSnapshot(null);
+            setHadSectionsSnapshot(false);
             setLoading(false);
             return;
         }
@@ -309,11 +369,25 @@ export default function CourseBuilderLayout() {
         try {
             const course = await courseService.getCourseById(resolvedCourseId);
             setCourse(course as CourseResponse);
+
+            // Capture snapshots ONLY on initial load (not on subsequent refreshes)
+            if (!hasFetchedOnceRef.current) {
+                setMetaSnapshot({
+                    title: course.title,
+                    description: course.description,
+                    price: course.price ?? null,
+                });
+                setHadSectionsSnapshot((course.sections ?? []).length > 0);
+            }
         } finally {
             hasFetchedOnceRef.current = true;
             setLoading(false);
         }
     }, [resolvedCourseId]);
+
+    const markStructureDirty = useCallback(() => {
+        setStructureDirty(true);
+    }, []);
 
     function mapPartialToUpdateRequest(partial: Partial<CourseResponse>): UpdateCourseRequest {
         const req: UpdateCourseRequest = {};
@@ -378,6 +452,11 @@ export default function CourseBuilderLayout() {
             return course;
         }
 
+        if (isPublished) {
+            toast.error("Ce cours est publié : modification bloquée.");
+            return course;
+        }
+
         if (processingLock) {
             toast.error("Sauvegarde bloquée : une vidéo est en PROCESSING. Attendez la fin du traitement.");
             return course;
@@ -393,6 +472,16 @@ export default function CourseBuilderLayout() {
             const payload = mapPartialToUpdateRequest(partial);
             const updated = await courseService.updateCourse(resolvedCourseId, payload);
             setCourse(updated as CourseResponse);
+
+            // Refresh snapshots after successful save
+            setMetaSnapshot({
+                title: updated.title,
+                description: updated.description,
+                price: updated.price ?? null,
+            });
+            setHadSectionsSnapshot((updated.sections ?? []).length > 0);
+            setStructureDirty(false);
+
             return updated as CourseResponse;
         } finally {
             setSaving(false);
@@ -404,7 +493,106 @@ export default function CourseBuilderLayout() {
             return;
         }
 
-        await saveCourse({sections: course.sections});
+        // Defense-in-depth: if PUBLISHED, block save with toast
+        if (isPublished) {
+            toast.error("Impossible de sauvegarder : ce cours est publié.");
+            return;
+        }
+
+        // Compute dirty states
+        const isMetaDirty = metaDirty;
+        const isStructureDirty = structureDirty;
+
+        // If nothing is dirty, no-op
+        if (!isMetaDirty && !isStructureDirty) {
+            toast.info("Aucune modification à sauvegarder.");
+            return;
+        }
+
+        const partial: Partial<CourseResponse> = {};
+
+        // PRIORITY 1: If structure is dirty, include sections AND meta if meta is also dirty
+        if (isStructureDirty) {
+            partial.sections = course.sections;
+
+            // Also include changed meta fields if meta is dirty
+            if (isMetaDirty && metaSnapshot) {
+                if (course.title !== metaSnapshot.title) {
+                    partial.title = course.title;
+                }
+                if (course.description !== metaSnapshot.description) {
+                    partial.description = course.description;
+                }
+                if (course.price !== metaSnapshot.price) {
+                    partial.price = course.price;
+                }
+            }
+
+            // Check for delete-all confirmation requirement
+            const sectionsArray = course.sections ?? [];
+            if (sectionsArray.length === 0 && hadSectionsSnapshot) {
+                // Course previously had sections, now has none: require confirmation
+                const payload = mapPartialToUpdateRequest(partial);
+                setPendingSavePayload(payload);
+                setShowDeleteAllConfirm(true);
+                return;
+            }
+
+            // No confirmation needed, save directly
+            await saveCourse(partial);
+            return;
+        }
+
+        // PRIORITY 2: Meta-only save (structure not dirty)
+        if (isMetaDirty && metaSnapshot) {
+            if (course.title !== metaSnapshot.title) {
+                partial.title = course.title;
+            }
+            if (course.description !== metaSnapshot.description) {
+                partial.description = course.description;
+            }
+            if (course.price !== metaSnapshot.price) {
+                partial.price = course.price;
+            }
+
+            // Meta-only: do NOT include sections
+            await saveCourse(partial);
+            return;
+        }
+    }
+
+    async function confirmDeleteAllSections(): Promise<void> {
+        if (!pendingSavePayload) {
+            return;
+        }
+
+        setSaving(true);
+        try {
+            const updated = await courseService.updateCourse(resolvedCourseId, pendingSavePayload);
+            setCourse(updated as CourseResponse);
+
+            // Refresh snapshots after successful save
+            setMetaSnapshot({
+                title: updated.title,
+                description: updated.description,
+                price: updated.price ?? null,
+            });
+            setHadSectionsSnapshot((updated.sections ?? []).length > 0);
+            setStructureDirty(false);
+
+            toast.success("Toutes les sections ont été supprimées.");
+        } catch (err: unknown) {
+            toast.error(`Sauvegarde échouée : ${getErrorMessage(err)}`);
+        } finally {
+            setSaving(false);
+            setShowDeleteAllConfirm(false);
+            setPendingSavePayload(null);
+        }
+    }
+
+    function cancelDeleteAll(): void {
+        setShowDeleteAllConfirm(false);
+        setPendingSavePayload(null);
     }
 
     async function handlePublishCourse(): Promise<void> {
@@ -418,6 +606,11 @@ export default function CourseBuilderLayout() {
 
         if (isWaitingValidation) {
             toast.error("Ce cours est déjà en attente de validation.");
+            return;
+        }
+
+        if (isPublished) {
+            toast.error("Ce cours est déjà publié.");
             return;
         }
 
@@ -465,6 +658,9 @@ export default function CourseBuilderLayout() {
 
     useEffect(() => {
         setSelectedChapterId(null);
+        setMetaSnapshot(null);
+        setHadSectionsSnapshot(false);
+        setStructureDirty(false);
         hasFetchedOnceRef.current = false;
 
         void refreshCourse();
@@ -480,10 +676,12 @@ export default function CourseBuilderLayout() {
             setSelectedChapterId,
             loading,
             saving,
+            structureDirty,
+            markStructureDirty,
             refreshCourse,
             saveCourse,
         };
-    }, [resolvedCourseId, course, selectedChapterId, loading, saving, refreshCourse, saveCourse]);
+    }, [resolvedCourseId, course, selectedChapterId, loading, saving, structureDirty, markStructureDirty, refreshCourse, saveCourse]);
 
     if (!resolvedCourseId) {
         return (
@@ -553,6 +751,7 @@ export default function CourseBuilderLayout() {
                                         <span>
                                             <Button
                                                 size="sm"
+                                                data-cy="course-save"
                                                 onClick={() => void handleSaveCourse()}
                                                 disabled={loading || saving || publishing || !course || structureLocked || !isEditable}
                                                 className="h-9 rounded-lg"
@@ -573,11 +772,13 @@ export default function CourseBuilderLayout() {
                                     </TooltipTrigger>
                                     <TooltipContent>
                                         <span>
-                                            {structureLocked
-                                                ? (isWaitingValidation
-                                                    ? "En attente de validation : sauvegarde bloquée."
-                                                    : "Vidéo en PROCESSING : sauvegarde bloquée temporairement.")
-                                                : "Sauvegarder les modifications du cours."}
+                                            {isPublished
+                                                ? "Publié : sauvegarde bloquée."
+                                                : (structureLocked
+                                                    ? (isWaitingValidation
+                                                        ? "En attente de validation : sauvegarde bloquée."
+                                                        : "Vidéo en PROCESSING : sauvegarde bloquée temporairement.")
+                                                    : "Sauvegarder les modifications du cours.")}
                                         </span>
                                     </TooltipContent>
                                 </Tooltip>
@@ -595,6 +796,27 @@ export default function CourseBuilderLayout() {
                         )}
                     </div>
                 </div>
+
+                {/* Delete-all sections confirmation modal */}
+                <AlertDialog open={showDeleteAllConfirm} onOpenChange={setShowDeleteAllConfirm}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Supprimer toutes les sections ?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Vous êtes sur le point de supprimer toutes les sections de ce cours. Cette action est
+                                irréversible. Voulez-vous continuer ?
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel data-cy="delete-all-cancel"
+                                               onClick={cancelDeleteAll}>Annuler</AlertDialogCancel>
+                            <AlertDialogAction data-cy="delete-all-confirm"
+                                               onClick={() => void confirmDeleteAllSections()}>
+                                Confirmer la suppression
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
             </CourseBuilderContext.Provider>
         </TooltipProvider>
     );

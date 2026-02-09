@@ -124,7 +124,7 @@ export default function CourseSectionsEditor({
                                                  setCourse,
                                                  refreshCourse,
                                              }: Readonly<Props>) {
-    const {selectedChapterId, setSelectedChapterId, course: builderCourse} = useCourseBuilder();
+    const {selectedChapterId, setSelectedChapterId, course: builderCourse, markStructureDirty} = useCourseBuilder();
     const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
 
     // Single source of truth: derive locks from builderCourse when available.
@@ -136,13 +136,17 @@ export default function CourseSectionsEditor({
         return (builderCourse as any)?.status === "WAITING_VALIDATION";
     }, [builderCourse]);
 
+    const isPublished = useMemo(() => {
+        return (builderCourse as any)?.status === "PUBLISHED";
+    }, [builderCourse]);
+
     const processingLock = useMemo(() => {
         return hasProcessingVideo(effectiveCourse);
     }, [effectiveCourse]);
 
     const structureLocked = useMemo(() => {
-        return isWaitingValidation || processingLock;
-    }, [isWaitingValidation, processingLock]);
+        return isWaitingValidation || isPublished || processingLock;
+    }, [isWaitingValidation, isPublished, processingLock]);
 
     useCoursePolling(course as any, refreshCourse, {enabled: processingLock, intervalMs: 3000});
 
@@ -182,6 +186,8 @@ export default function CourseSectionsEditor({
             return;
         }
 
+        markStructureDirty();
+
         setCourse((prev) => {
             const existing = prev.sections ?? [];
             const nextPosition = existing.length === 0 ? 1 : Math.max(...existing.map((s) => s.position ?? 0)) + 1;
@@ -204,6 +210,8 @@ export default function CourseSectionsEditor({
         if (structureLocked) {
             return;
         }
+
+        markStructureDirty();
 
         const newChapterId = createClientKey();
 
@@ -248,6 +256,8 @@ export default function CourseSectionsEditor({
             return;
         }
 
+        markStructureDirty();
+
         setCourse((prev) => {
             const nextSections = (prev.sections ?? []).map((s) => {
                 if (s.id !== sectionId) {
@@ -270,6 +280,8 @@ export default function CourseSectionsEditor({
         if (structureLocked) {
             return;
         }
+
+        markStructureDirty();
 
         const deleted = (course.sections ?? []).find((s) => s.id === sectionId);
         const shouldResetSelection =
@@ -302,6 +314,8 @@ export default function CourseSectionsEditor({
             return;
         }
 
+        markStructureDirty();
+
         setCourse((prev) => {
             const nextSections = (prev.sections ?? []).map((s) => ({
                 ...s,
@@ -327,6 +341,8 @@ export default function CourseSectionsEditor({
         if (structureLocked) {
             return;
         }
+
+        markStructureDirty();
 
         if (selectedChapterId === chapterId) {
             setSelectedChapterId(null);
@@ -451,12 +467,14 @@ export default function CourseSectionsEditor({
                                 if (structureLocked) {
                                     return;
                                 }
+                                markStructureDirty();
                                 moveSection(sectionIndex, direction);
                             }}
                             onMoveChapter={(sectionIndex, chapterIndex, direction) => {
                                 if (structureLocked) {
                                     return;
                                 }
+                                markStructureDirty();
                                 moveChapter(sectionIndex, chapterIndex, direction);
                             }}
                             onRenameSection={handleRenameSection}

@@ -64,10 +64,15 @@ function hasProcessingVideo(course: unknown): boolean {
 function getDeleteDisabledReason(args: Readonly<{
     courseStatus: string;
     isWaitingValidation: boolean;
+    isPublished: boolean;
     processingLock: boolean;
 }>): string {
     if (args.isWaitingValidation) {
         return "Désactivé : en attente de validation.";
+    }
+
+    if (args.isPublished) {
+        return "Désactivé : cours publié.";
     }
 
     if (args.processingLock) {
@@ -107,6 +112,10 @@ export default function EditCoursePage() {
         return course?.status === "WAITING_VALIDATION";
     }, [course?.status]);
 
+    const isPublished = useMemo(() => {
+        return course?.status === "PUBLISHED";
+    }, [course?.status]);
+
     const processingLock = useMemo(() => {
         return hasProcessingVideo(course);
     }, [course]);
@@ -120,12 +129,16 @@ export default function EditCoursePage() {
             return false;
         }
 
+        if (isPublished) {
+            return false;
+        }
+
         if (processingLock) {
             return false;
         }
 
         return true;
-    }, [course, isWaitingValidation, processingLock]);
+    }, [course, isWaitingValidation, isPublished, processingLock]);
 
     const canDeleteDraft = useMemo(() => {
         if (!course) {
@@ -136,12 +149,16 @@ export default function EditCoursePage() {
             return false;
         }
 
+        if (isPublished) {
+            return false;
+        }
+
         if (processingLock) {
             return false;
         }
 
         return course.status === "DRAFT";
-    }, [course, isWaitingValidation, processingLock]);
+    }, [course, isWaitingValidation, isPublished, processingLock]);
 
     const deleteDisabledReason = useMemo(() => {
         if (canDeleteDraft) {
@@ -151,9 +168,10 @@ export default function EditCoursePage() {
         return getDeleteDisabledReason({
             courseStatus: course?.status ?? "",
             isWaitingValidation,
+            isPublished,
             processingLock,
         });
-    }, [canDeleteDraft, course?.status, isWaitingValidation, processingLock]);
+    }, [canDeleteDraft, course?.status, isWaitingValidation, isPublished, processingLock]);
 
     if (loading) {
         return (
@@ -204,11 +222,17 @@ export default function EditCoursePage() {
                             </div>
                         ) : null}
 
-                        {!isWaitingValidation && processingLock ? (
+                        {isPublished ? (
+                            <div className="mt-2 rounded-lg border bg-muted/20 p-3 text-sm text-muted-foreground">
+                                Ce cours est <strong>publié</strong> : édition et suppression désactivées.
+                            </div>
+                        ) : null}
+
+                        {!isWaitingValidation && !isPublished && processingLock ? (
                             <div
                                 className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
                                 Édition désactivée : au moins une vidéo est en <strong>PROCESSING</strong>. Le polling
-                                backend/UI peut rafraîchir l’état du cours et écraser des changements non sauvegardés.
+                                backend/UI peut rafraîchir l'état du cours et écraser des changements non sauvegardés.
                             </div>
                         ) : null}
 
@@ -256,6 +280,7 @@ export default function EditCoursePage() {
                         <Label htmlFor="course-title">Titre</Label>
                         <Input
                             id="course-title"
+                            data-cy="course-title"
                             value={course.title ?? ""}
                             disabled={!canEditInfo}
                             onChange={(e) => {
@@ -277,6 +302,7 @@ export default function EditCoursePage() {
                         <Label htmlFor="course-description">Description</Label>
                         <Textarea
                             id="course-description"
+                            data-cy="course-description"
                             value={course.description ?? ""}
                             rows={6}
                             disabled={!canEditInfo}

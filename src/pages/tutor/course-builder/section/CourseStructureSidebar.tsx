@@ -113,6 +113,7 @@ export default function CourseStructureSidebar({
                     <Button
                         type="button"
                         variant="outline"
+                        data-cy="add-section"
                         className="w-full border-dashed text-muted-foreground hover:text-primary"
                         disabled={readOnly}
                         onClick={onAddSection}

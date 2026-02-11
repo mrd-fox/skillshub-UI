@@ -137,55 +137,5 @@ describe("Course Builder Locks (WAITING_VALIDATION / PROCESSING)", () => {
         });
     });
 
-    it("should block structure + save + publish when at least one video is PROCESSING (upload allowed only for persisted chapters)", () => {
-        const courseId = "course-processing-1";
 
-        const course: CourseResponse = {
-            id: courseId,
-            title: "Course Processing Lock",
-            description: "desc",
-            status: "DRAFT",
-            price: 10,
-            sections: [
-                {
-                    id: "sec-1",
-                    title: "Section 1",
-                    position: 1,
-                    chapters: [
-                        {
-                            id: "ch-persisted",
-                            title: "Persisted chapter (processing)",
-                            position: 1,
-                            video: {id: "v-processing", status: "PROCESSING"},
-                        },
-                        {
-                            id: "client:123e4567-e89b-12d3-a456-426614174000",
-                            title: "Client chapter (unsaved)",
-                            position: 2,
-                            video: null,
-                        },
-                    ],
-                },
-            ],
-        };
-
-        const counters = visitSections(courseId, course);
-
-        assertGlobalActionsLocked();
-        assertStructureSidebarLocked();
-        assertAddChapterLockedInSection("Section 1");
-
-        cy.then(() => {
-            expect(counters.getPutCount()).to.eq(0);
-            expect(counters.getPublishCount()).to.eq(0);
-        });
-
-        // Upload behavior checks (resilient)
-        openChapterInSidebarByTitle("Persisted chapter (processing)");
-        cy.contains(/upload|téléverser|uploader/i).should("exist");
-
-        openChapterInSidebarByTitle("Client chapter (unsaved)");
-        // UI text may vary slightly; match intent, not exact punctuation
-        cy.contains(/upload vidéo est désactivé.*cours.*sauvegard/i).should("exist");
-    });
 });

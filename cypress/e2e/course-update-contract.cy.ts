@@ -55,6 +55,21 @@ describe("Course Update Contract (mocked)", () => {
         cy.wait("@getCourse");
     }
 
+
+    function openSidebarIfClosed(): void {
+        cy.get("body").then(($body) => {
+            const addVisible = $body.find('[data-cy="add-section"]:visible').length > 0;
+
+            if (addVisible) {
+                // Sidebar already open -> do nothing
+            } else {
+                cy.get('[data-cy="toggle-course-sidebar"]').should("be.visible").click();
+            }
+        });
+
+        cy.get('[data-cy="add-section"]').should("be.visible");
+    }
+
     beforeEach(() => {
         cy.viewport(1440, 900); // ✅ ensures sidebar/layout is rendered in desktop mode
 
@@ -62,6 +77,7 @@ describe("Course Update Contract (mocked)", () => {
         cy.clearLocalStorage();
         stubAuth();
     });
+
 
     it("Meta-only title change -> PUT must include ONLY title (no sections)", () => {
         cy.intercept("GET", courseGetUrl(COURSE_ID), {
@@ -110,6 +126,7 @@ describe("Course Update Contract (mocked)", () => {
         }).as("updateCourse");
 
         visitEdit();
+
 
         cy.get("input#course-title").clear().type("New Title");
         cy.contains("button", "Enregistrer").click();
@@ -283,8 +300,8 @@ describe("Course Update Contract (mocked)", () => {
                 },
             });
         }).as("updateCourse");
-
         visitSections();
+        cy.get('[data-cy="toggle-course-sidebar"]').click();
 
         // ✅ Open sidebar (required in current UI state)
         cy.get('[data-cy="toggle-course-sidebar"]').should("be.visible").click();

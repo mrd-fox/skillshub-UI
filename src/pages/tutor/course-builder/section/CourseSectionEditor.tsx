@@ -1,16 +1,4 @@
-/**
- * CourseSectionsEditor
- * - Handles UI + client-side ordering (UP/DOWN)
- * - NO API calls here
- * - Persistence happens only via the global "Save course" button (outside)
- *
- * Updated (MVP locks):
- * - Structure changes are blocked when:
- *   - course.status === WAITING_VALIDATION
- *   - OR at least one video is PROCESSING (polling active)
- * - Video upload remains allowed for persisted chapters (non clientKey).
- */
-import {Dispatch, SetStateAction, useMemo, useState} from "react";
+import {useMemo, useState} from "react";
 import {PanelRightClose, PanelRightOpen} from "lucide-react";
 
 import ChapterVideoPanel from "@/components/courseBuilder/ChapterVideoPanel.tsx";
@@ -20,85 +8,86 @@ import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card.tsx
 import {cn} from "@/lib/utils.ts";
 
 import {useCoursePolling} from "@/hooks/useCoursePolling.ts";
-import {useCourseBuilder} from "@/layout/tutor/CourseBuilderLayout.tsx";
+import {ChapterResponse, CourseResponse, SectionResponse, useCourseBuilder} from "@/layout/tutor";
 import {useSectionsOrder} from "@/pages/tutor/course-builder/section/useSectionsOrder.ts";
 
 import CourseStructureSidebar from "./CourseStructureSidebar";
+import {hasInProgressVideo} from "@/lib/isVideoInProgress.ts";
 
-export type ChapterLike = {
-    id: string; // backend id OR clientKey ("client:<uuid>")
-    title: string;
-    position?: number | null;
-    video?: any | null;
-};
-
-export type SectionLike = {
-    id: string; // backend id OR clientKey ("client:<uuid>")
-    title: string;
-    position?: number | null;
-    chapters: ChapterLike[];
-};
-
-export type CourseLike = {
-    id: string;
-    sections: SectionLike[];
-};
-
-type Props = {
-    courseId: string;
-    course: CourseLike;
-    setCourse: Dispatch<SetStateAction<CourseLike>>;
-    refreshCourse: () => Promise<void>;
-};
-
-type ViewerState = "EMPTY" | "UNSAVED" | "READY";
+/**
+ * CourseSectionsEditor
+ * - Handles UI + client-side ordering (UP/DOWN)
+ * - NO API calls here
+ * - Persistence happens only via the global "Save course" button (outside)
+ *
+ * Updated (MVP locks):
+ * - Structure changes are blocked when:
+ *   - course.status === WAITING_VALIDATION
+ *   - OR course.status === PUBLISHED
+ *   - OR at least one video is PENDING or PROCESSING (polling active)
+ * - Video upload remains allowed for persisted chapters (non clientKey).
+ */
 
 type SelectedContext = {
-    section: SectionLike;
-    chapter: ChapterLike;
-} | null;
+    selectedSectionId: string | null;
+    selectedChapterId: string | null;
+    selectedSectionTitle: string | null;
+    selectedChapterTitle: string | null;
+};
 
 function isClientKey(id: string | null | undefined): boolean {
     const value = (id ?? "").trim();
     return value.startsWith("client:");
 }
 
-function createClientKey(): string {
-    return `client:${crypto.randomUUID()}`;
-}
-
-function countChapters(sections: SectionLike[]): number {
+function countChapters(sections: SectionResponse[]): number {
     return sections.reduce((acc, s) => acc + (s.chapters?.length ?? 0), 0);
 }
 
-function hasProcessingVideo(course: CourseLike | null | undefined): boolean {
-    if (!course) {
-        return false;
+function findSelectedContext(sections: SectionResponse[], selectedChapterId: string | null): SelectedContext {
+    if (!selectedChapterId) {
+        return {
+            selectedSectionId: null,
+            selectedChapterId: null,
+            selectedSectionTitle: null,
+            selectedChapterTitle: null,
+        };
     }
 
-    const sections = course.sections ?? [];
     for (const section of sections) {
         const chapters = section.chapters ?? [];
         for (const chapter of chapters) {
-            const status = chapter.video?.status ?? null;
-            if (status === "PROCESSING") {
-                return true;
+            if (chapter.id === selectedChapterId) {
+                return {
+                    selectedSectionId: section.id,
+                    selectedChapterId,
+                    selectedSectionTitle: section.title,
+                    selectedChapterTitle: chapter.title,
+                };
             }
         }
     }
 
-    return false;
+    return {
+        selectedSectionId: null,
+        selectedChapterId: null,
+        selectedSectionTitle: null,
+        selectedChapterTitle: null,
+    };
 }
 
-function findSelectedContext(sections: SectionLike[], selectedChapterId: string | null): SelectedContext {
+function findSelectedChapter(
+    sections: SectionResponse[],
+    selectedChapterId: string | null
+): { sectionId: string; chapter: ChapterResponse } | null {
     if (!selectedChapterId) {
         return null;
     }
 
     for (const section of sections) {
-        for (const chapter of section.chapters) {
+        for (const chapter of section.chapters ?? []) {
             if (chapter.id === selectedChapterId) {
-                return {section, chapter};
+                return {sectionId: section.id, chapter};
             }
         }
     }
@@ -106,388 +95,407 @@ function findSelectedContext(sections: SectionLike[], selectedChapterId: string 
     return null;
 }
 
-function computeViewerState(selected: SelectedContext): ViewerState {
-    if (!selected) {
-        return "EMPTY";
-    }
+function sortAndNormalize(sections: SectionResponse[]): SectionResponse[] {
+    const sortedSections = [...sections].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 
-    if (isClientKey(selected.section.id) || isClientKey(selected.chapter.id)) {
-        return "UNSAVED";
-    }
+    return sortedSections.map((s, sectionIndex) => {
+        const sortedChapters = [...(s.chapters ?? [])].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 
-    return "READY";
+        return {
+            ...s,
+            position: sectionIndex + 1,
+            chapters: sortedChapters.map((c, chapterIndex) => {
+                return {
+                    ...c,
+                    position: chapterIndex + 1,
+                };
+            }),
+        };
+    });
 }
 
-export default function CourseSectionsEditor({
-                                                 courseId,
-                                                 course,
-                                                 setCourse,
-                                                 refreshCourse,
-                                             }: Readonly<Props>) {
-    const {selectedChapterId, setSelectedChapterId, course: builderCourse, markStructureDirty} = useCourseBuilder();
-    const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+function makeClientId(): string {
+    // Use browser crypto when available
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+        return `client:${crypto.randomUUID()}`;
+    }
 
-    // Single source of truth: derive locks from builderCourse when available.
-    const effectiveCourse = useMemo(() => {
-        return (builderCourse as unknown as CourseLike | null) ?? course;
-    }, [builderCourse, course]);
+    // Fallback: sufficiently unique for client-side temp keys
+    return `client:${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 
-    const isWaitingValidation = useMemo(() => {
-        return (builderCourse as any)?.status === "WAITING_VALIDATION";
-    }, [builderCourse]);
+export default function CourseSectionEditor() {
+    const {
+        courseId,
+        course,
+        setCourse,
+        selectedChapterId,
+        setSelectedChapterId,
+        markStructureDirty,
+        refreshCourse,
+    } = useCourseBuilder();
 
-    const isPublished = useMemo(() => {
-        return (builderCourse as any)?.status === "PUBLISHED";
-    }, [builderCourse]);
+    const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
 
-    const processingLock = useMemo(() => {
-        return hasProcessingVideo(effectiveCourse);
+    const effectiveCourse: CourseResponse | null = useMemo(() => {
+        return course ?? null;
+    }, [course]);
+
+    // Critical: always sort by position to avoid Set/random ordering jitter.
+    const sections: SectionResponse[] = useMemo(() => {
+        const raw = effectiveCourse?.sections ?? [];
+        return sortAndNormalize(raw);
     }, [effectiveCourse]);
 
-    const structureLocked = useMemo(() => {
-        return isWaitingValidation || isPublished || processingLock;
-    }, [isWaitingValidation, isPublished, processingLock]);
+    const totalChapters = useMemo(() => {
+        return countChapters(sections);
+    }, [sections]);
 
-    useCoursePolling(course as any, refreshCourse, {enabled: processingLock, intervalMs: 3000});
-
-    const sectionsSorted = useMemo<SectionLike[]>(() => {
-        const raw = [...(course.sections ?? [])];
-        return raw
-            .sort((a, b) => (a.position ?? Number.MAX_SAFE_INTEGER) - (b.position ?? Number.MAX_SAFE_INTEGER))
-            .map((section) => ({
-                ...section,
-                chapters: [...(section.chapters ?? [])].sort(
-                    (a, b) => (a.position ?? Number.MAX_SAFE_INTEGER) - (b.position ?? Number.MAX_SAFE_INTEGER)
-                ),
-            }));
-    }, [course.sections]);
-
-    const {moveSection, moveChapter} = useSectionsOrder(sectionsSorted, (nextSections) => {
-        setCourse((prev) => ({
-            ...prev,
-            sections: nextSections,
-        }));
-    });
+    const selectedContext = useMemo(() => {
+        return findSelectedContext(sections, selectedChapterId);
+    }, [sections, selectedChapterId]);
 
     const selected = useMemo(() => {
-        return findSelectedContext(sectionsSorted, selectedChapterId);
-    }, [sectionsSorted, selectedChapterId]);
+        return findSelectedChapter(sections, selectedChapterId);
+    }, [sections, selectedChapterId]);
 
-    const viewerState = useMemo(() => {
-        return computeViewerState(selected);
+    const processingLock = useMemo(() => {
+        return hasInProgressVideo(effectiveCourse);
+    }, [effectiveCourse]);
+
+    useCoursePolling(
+        effectiveCourse,
+        async () => {
+            await refreshCourse();
+        },
+        {enabled: processingLock, intervalMs: 3000}
+    );
+
+    const status = course?.status ?? "DRAFT";
+    const isWaitingValidation = status === "WAITING_VALIDATION";
+    const isPublished = status === "PUBLISHED";
+
+    const structureLocked = isWaitingValidation || isPublished || processingLock;
+
+    function setSections(next: SectionResponse[]) {
+        setCourse((prev) => {
+            if (!prev) {
+                return prev;
+            }
+
+            return {
+                ...prev,
+                sections: sortAndNormalize(next),
+            };
+        });
+    }
+
+    const {
+        moveSection,
+        moveChapter,
+        canMoveSectionUp,
+        canMoveSectionDown,
+        canMoveChapterUp,
+        canMoveChapterDown,
+    } = useSectionsOrder({
+        sections,
+        setSections,
+        onStructureChange: () => {
+            markStructureDirty();
+        },
+        structureLocked,
+    });
+
+    function handleSelectChapter(id: string) {
+        setSelectedChapterId(id);
+    }
+
+    function toggleSidebar() {
+        setSidebarOpen((prev) => !prev);
+    }
+
+    const selectedIsPersisted = useMemo(() => {
+        if (!selected) {
+            return false;
+        }
+        return !isClientKey(selected.chapter.id);
     }, [selected]);
 
-    const viewerSectionId = selected?.section?.id ?? null;
-    const viewerChapterId = selected?.chapter?.id ?? null;
-    const viewerVideo = selected?.chapter?.video ?? null;
+    // =========================
+    // Structure actions (restore full functionality)
+    // =========================
 
-    function handleAddSection() {
+    function handleAddSection(): void {
         if (structureLocked) {
             return;
         }
 
-        markStructureDirty();
-
-        setCourse((prev) => {
-            const existing = prev.sections ?? [];
-            const nextPosition = existing.length === 0 ? 1 : Math.max(...existing.map((s) => s.position ?? 0)) + 1;
-
-            const newSection: SectionLike = {
-                id: createClientKey(),
+        const next: SectionResponse[] = [
+            ...sections,
+            {
+                id: makeClientId(),
                 title: "Nouvelle section",
-                position: nextPosition,
+                position: (sections.length ?? 0) + 1,
                 chapters: [],
-            };
+                createdAt: null,
+                updatedAt: null,
+            },
+        ];
 
-            return {
-                ...prev,
-                sections: [...existing, newSection],
-            };
-        });
+        setSections(next);
+        markStructureDirty();
     }
 
-    function handleAddChapter(sectionId: string) {
+    function handleAddChapter(sectionId: string): void {
         if (structureLocked) {
             return;
         }
 
+        const next = sections.map((s) => {
+            if (s.id !== sectionId) {
+                return s;
+            }
+
+            const chapters = s.chapters ?? [];
+            const newChapter: ChapterResponse = {
+                id: makeClientId(),
+                title: "Nouveau chapitre",
+                position: (chapters.length ?? 0) + 1,
+                createdAt: null,
+                updatedAt: null,
+                video: null,
+            };
+
+            return {
+                ...s,
+                chapters: [...chapters, newChapter],
+            };
+        });
+
+        setSections(next);
         markStructureDirty();
+    }
 
-        const newChapterId = createClientKey();
+    function handleRenameSection(sectionId: string, nextTitle: string): void {
+        if (structureLocked) {
+            return;
+        }
 
-        setCourse((prev) => {
-            const nextSections = (prev.sections ?? []).map((s) => {
-                if (s.id !== sectionId) {
-                    return s;
+        const trimmed = (nextTitle ?? "").trim();
+        if (trimmed.length === 0) {
+            return;
+        }
+
+        const next = sections.map((s) => {
+            if (s.id !== sectionId) {
+                return s;
+            }
+            return {...s, title: trimmed};
+        });
+
+        setSections(next);
+        markStructureDirty();
+    }
+
+    function handleRenameChapter(chapterId: string, nextTitle: string): void {
+        if (structureLocked) {
+            return;
+        }
+
+        const trimmed = (nextTitle ?? "").trim();
+        if (trimmed.length === 0) {
+            return;
+        }
+
+        const next = sections.map((s) => {
+            const chapters = s.chapters ?? [];
+            const updated = chapters.map((c) => {
+                if (c.id !== chapterId) {
+                    return c;
                 }
-
-                const chapters = s.chapters ?? [];
-                const nextPosition = chapters.length === 0 ? 1 : Math.max(...chapters.map((c) => c.position ?? 0)) + 1;
-
-                const newChapter: ChapterLike = {
-                    id: newChapterId,
-                    title: "Nouveau chapitre",
-                    position: nextPosition,
-                    video: null,
-                };
-
-                return {
-                    ...s,
-                    chapters: [...chapters, newChapter],
-                };
+                return {...c, title: trimmed};
             });
 
-            return {
-                ...prev,
-                sections: nextSections,
-            };
+            return {...s, chapters: updated};
         });
 
-        setSelectedChapterId(newChapterId);
+        setSections(next);
+        markStructureDirty();
     }
 
-    function handleRenameSection(sectionId: string, nextTitle: string) {
+    function handleDeleteSection(sectionId: string): void {
         if (structureLocked) {
             return;
         }
 
-        const normalized = (nextTitle ?? "").trim();
-        if (normalized.length === 0) {
-            return;
-        }
+        const removedSection = sections.find((s) => s.id === sectionId) ?? null;
+        const removedChapterIds = new Set((removedSection?.chapters ?? []).map((c) => c.id));
 
-        markStructureDirty();
+        const next = sections.filter((s) => s.id !== sectionId);
 
-        setCourse((prev) => {
-            const nextSections = (prev.sections ?? []).map((s) => {
-                if (s.id !== sectionId) {
-                    return s;
-                }
-                return {
-                    ...s,
-                    title: normalized,
-                };
-            });
-
-            return {
-                ...prev,
-                sections: nextSections,
-            };
-        });
-    }
-
-    function handleDeleteSection(sectionId: string) {
-        if (structureLocked) {
-            return;
-        }
-
-        markStructureDirty();
-
-        const deleted = (course.sections ?? []).find((s) => s.id === sectionId);
-        const shouldResetSelection =
-            Boolean(deleted) &&
-            Boolean(selectedChapterId) &&
-            (deleted?.chapters ?? []).some((c) => c.id === selectedChapterId);
-
-        setCourse((prev) => {
-            const existing = prev.sections ?? [];
-            const nextSections = existing.filter((s) => s.id !== sectionId);
-
-            return {
-                ...prev,
-                sections: nextSections,
-            };
-        });
-
-        if (shouldResetSelection) {
+        if (selectedChapterId && removedChapterIds.has(selectedChapterId)) {
             setSelectedChapterId(null);
         }
+
+        setSections(next);
+        markStructureDirty();
     }
 
-    function handleRenameChapter(chapterId: string, nextTitle: string) {
+    function handleDeleteChapter(chapterId: string): void {
         if (structureLocked) {
             return;
         }
 
-        const normalized = (nextTitle ?? "").trim();
-        if (normalized.length === 0) {
-            return;
-        }
+        const next = sections.map((s) => {
+            const chapters = s.chapters ?? [];
+            const filtered = chapters.filter((c) => c.id !== chapterId);
 
-        markStructureDirty();
-
-        setCourse((prev) => {
-            const nextSections = (prev.sections ?? []).map((s) => ({
-                ...s,
-                chapters: (s.chapters ?? []).map((c) => {
-                    if (c.id !== chapterId) {
-                        return c;
-                    }
-                    return {
-                        ...c,
-                        title: normalized,
-                    };
-                }),
-            }));
+            if (filtered.length === chapters.length) {
+                return s;
+            }
 
             return {
-                ...prev,
-                sections: nextSections,
+                ...s,
+                chapters: filtered,
             };
         });
-    }
-
-    function handleDeleteChapter(chapterId: string) {
-        if (structureLocked) {
-            return;
-        }
-
-        markStructureDirty();
 
         if (selectedChapterId === chapterId) {
             setSelectedChapterId(null);
         }
 
-        setCourse((prev) => {
-            const nextSections = (prev.sections ?? []).map((s) => ({
-                ...s,
-                chapters: (s.chapters ?? []).filter((c) => c.id !== chapterId),
-            }));
-
-            return {
-                ...prev,
-                sections: nextSections,
-            };
-        });
-    }
-
-    function renderViewer() {
-        if (viewerState === "EMPTY") {
-            return (
-                <div className="rounded-lg border bg-muted/10 p-4 text-sm text-muted-foreground">
-                    Aucun chapitre sélectionné.
-                </div>
-            );
-        }
-
-        if (viewerState === "UNSAVED") {
-            return (
-                <div className="rounded-lg border bg-muted/10 p-4 text-sm text-muted-foreground">
-                    Ce chapitre n’est pas encore enregistré.
-                    <br/>
-                    L’upload vidéo est désactivé tant que le cours n’est pas sauvegardé.
-                    <br/>
-                    Cliquez sur <strong>Save course</strong> pour continuer.
-                </div>
-            );
-        }
-
-        return (
-            <ChapterVideoPanel
-                courseId={courseId}
-                sectionId={viewerSectionId as string}
-                chapterId={viewerChapterId as string}
-                video={viewerVideo}
-                onRequestRefresh={refreshCourse}
-            />
-        );
+        setSections(next);
+        markStructureDirty();
     }
 
     return (
-        <div className="space-y-6">
-            <div className="space-y-2">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                    <div>
-                        <h1 className="text-2xl font-bold">Sections & chapitres</h1>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                            Navigation + réorganisation. Les changements sont enregistrés uniquement via{" "}
-                            <strong>Save course</strong>.
-                        </p>
+        <div className="flex flex-col gap-4">
+            {/* Top toolbar */}
+            <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="secondary" className="text-xs">
+                        {sections.length} section(s)
+                    </Badge>
 
-                        {isWaitingValidation ? (
-                            <p className="mt-1 text-sm text-muted-foreground">
-                                Ce cours est <strong>en attente de validation</strong> : l’édition est désactivée.
-                            </p>
-                        ) : null}
+                    <Badge variant="secondary" className="text-xs">
+                        {totalChapters} chapitre(s)
+                    </Badge>
 
-                        {!isWaitingValidation && processingLock ? (
-                            <p className="mt-1 text-sm text-muted-foreground">
-                                Une vidéo est en <strong>PROCESSING</strong> : la structure du cours est temporairement
-                                bloquée, mais vous pouvez continuer à uploader d’autres vidéos sur des chapitres déjà
-                                enregistrés.
-                            </p>
-                        ) : null}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="rounded-full px-3 py-1 text-xs font-semibold">
-                            {sectionsSorted.length} section{sectionsSorted.length > 1 ? "s" : ""}
+                    {isWaitingValidation ? (
+                        <Badge variant="destructive" className="text-xs">
+                            Lecture seule (validation)
                         </Badge>
-                        <Badge variant="outline" className="rounded-full px-3 py-1 text-xs font-semibold">
-                            {countChapters(sectionsSorted)} chapitre{countChapters(sectionsSorted) > 1 ? "s" : ""}
+                    ) : null}
+
+                    {isPublished ? (
+                        <Badge variant="destructive" className="text-xs">
+                            Lecture seule (publié)
                         </Badge>
+                    ) : null}
 
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setIsSidebarOpen((v) => !v)}
-                            aria-label={isSidebarOpen ? "Fermer la sidebar" : "Ouvrir la sidebar"}
-                        >
-                            {isSidebarOpen ? <PanelRightClose className="h-4 w-4"/> :
-                                <PanelRightOpen className="h-4 w-4"/>}
-                        </Button>
-                    </div>
-                </div>
-
-                <div className="h-px w-full bg-border"/>
-            </div>
-
-            {sectionsSorted.length === 0 ? (
-                <div className="rounded-lg border bg-muted/10 p-4 text-sm text-muted-foreground">
-                    Ce cours ne contient aucune section.
-                </div>
-            ) : (
-                <div
-                    className={cn("grid gap-6", isSidebarOpen ? "grid-cols-1 lg:grid-cols-[1fr_380px]" : "grid-cols-1")}>
-                    <Card className="border-muted/60">
-                        <CardHeader className="pb-3">
-                            <CardTitle className="text-base">Viewer</CardTitle>
-                        </CardHeader>
-
-                        <CardContent>{renderViewer()}</CardContent>
-                    </Card>
-
-                    {isSidebarOpen ? (
-                        <CourseStructureSidebar
-                            sections={sectionsSorted}
-                            selectedChapterId={selectedChapterId}
-                            onSelectChapter={setSelectedChapterId}
-                            onMoveSection={(sectionIndex, direction) => {
-                                if (structureLocked) {
-                                    return;
-                                }
-                                markStructureDirty();
-                                moveSection(sectionIndex, direction);
-                            }}
-                            onMoveChapter={(sectionIndex, chapterIndex, direction) => {
-                                if (structureLocked) {
-                                    return;
-                                }
-                                markStructureDirty();
-                                moveChapter(sectionIndex, chapterIndex, direction);
-                            }}
-                            onRenameSection={handleRenameSection}
-                            onDeleteSection={handleDeleteSection}
-                            onRenameChapter={handleRenameChapter}
-                            onDeleteChapter={handleDeleteChapter}
-                            onAddSection={handleAddSection}
-                            onAddChapter={handleAddChapter}
-                            readOnly={structureLocked}
-                        />
+                    {processingLock ? (
+                        <Badge variant="outline" className="text-xs">
+                            Vidéo en cours
+                        </Badge>
                     ) : null}
                 </div>
-            )}
+
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    data-cy="toggle-course-sidebar"
+                    onClick={toggleSidebar}
+                    aria-label={sidebarOpen ? "Masquer la sidebar" : "Afficher la sidebar"}
+                >
+                    {sidebarOpen ? (
+                        <PanelRightClose className="h-4 w-4"/>
+                    ) : (
+                        <PanelRightOpen className="h-4 w-4"/>
+                    )}
+                </Button>
+            </div>
+
+            {/* Layout */}
+            <div className="flex min-w-0 flex-col gap-4 lg:flex-row">
+                {/* MAIN (left) */}
+                <main className="order-1 flex-1 min-w-0 lg:min-w-[33%]">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-base">
+                                {selectedContext.selectedChapterTitle ? (
+                                    <>
+                                        {selectedContext.selectedSectionTitle} — {selectedContext.selectedChapterTitle}
+                                    </>
+                                ) : (
+                                    "Sélectionne un chapitre"
+                                )}
+                            </CardTitle>
+                        </CardHeader>
+
+                        <CardContent>
+                            {selected ? (
+                                <ChapterVideoPanel
+                                    courseId={courseId}
+                                    sectionId={selected.sectionId}
+                                    chapterId={selected.chapter.id}
+                                    chapterTitle={selected.chapter.title}
+                                    video={selected.chapter.video ?? null}
+                                    onRequestRefresh={async () => {
+                                        await refreshCourse();
+                                    }}
+                                    readOnly={structureLocked}
+                                    uploadDisabledReason={
+                                        !selectedIsPersisted
+                                            ? "L’upload vidéo est désactivé tant que le cours n’a pas été sauvegardé."
+                                            : null
+                                    }
+                                />
+                            ) : (
+                                <div className="text-sm text-muted-foreground">
+                                    Choisis un chapitre dans la sidebar pour gérer la vidéo.
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </main>
+
+                {/* SIDEBAR (right) */}
+                <aside
+                    className={cn(
+                        "order-2 w-full lg:w-[420px] lg:flex-shrink-0",
+                        sidebarOpen ? "block" : "hidden"
+                    )}
+                >
+                    <Card className="h-full">
+                        <CardHeader>
+                            <CardTitle className="text-base">Structure du cours</CardTitle>
+                        </CardHeader>
+
+                        <CardContent>
+                            <CourseStructureSidebar
+                                courseId={courseId}
+                                sections={sections}
+                                selectedChapterId={selectedChapterId}
+                                onSelectChapter={handleSelectChapter}
+                                structureLocked={structureLocked}
+                                moveSection={moveSection}
+                                moveChapter={moveChapter}
+                                canMoveSectionUp={canMoveSectionUp}
+                                canMoveSectionDown={canMoveSectionDown}
+                                canMoveChapterUp={canMoveChapterUp}
+                                canMoveChapterDown={canMoveChapterDown}
+                                onAddSection={handleAddSection}
+                                onAddChapter={handleAddChapter}
+                                onRenameSection={handleRenameSection}
+                                onDeleteSection={handleDeleteSection}
+                                onRenameChapter={handleRenameChapter}
+                                onDeleteChapter={handleDeleteChapter}
+                            />
+                        </CardContent>
+                    </Card>
+                </aside>
+            </div>
         </div>
     );
 }

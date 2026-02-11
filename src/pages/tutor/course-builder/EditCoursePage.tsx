@@ -1,6 +1,6 @@
 import {useMemo, useState} from "react";
 import {Textarea} from "@/components/ui/textarea.tsx";
-import {useCourseBuilder} from "@/layout/tutor/CourseBuilderLayout.tsx";
+import {useCourseBuilder} from "@/layout/tutor";
 import {useAuth} from "@/context/AuthContext.tsx";
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card.tsx";
 import {Badge} from "@/components/ui/badge.tsx";
@@ -34,6 +34,28 @@ function formatDate(value?: string | null): string {
     return d.toLocaleString();
 }
 
+function isVideoInProgress(status: unknown): boolean {
+    if (typeof status !== "string") {
+        return false;
+    }
+
+    if (status === "PENDING") {
+        return true;
+    }
+    if (status === "PROCESSING") {
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Check if course has any video in transitional state (PENDING or PROCESSING).
+ * Course information editing must be locked when at least one video requires backend processing.
+ *
+ * @param course Course to check
+ * @returns true if at least one video is PENDING or PROCESSING
+ */
 function hasProcessingVideo(course: unknown): boolean {
     if (!course || typeof course !== "object") {
         return false;
@@ -52,7 +74,7 @@ function hasProcessingVideo(course: unknown): boolean {
         const chapters = section.chapters ?? [];
         for (const chapter of chapters) {
             const status: VideoStatus = chapter?.video?.status ?? null;
-            if (status === "PROCESSING") {
+            if (isVideoInProgress(status)) {
                 return true;
             }
         }
@@ -76,7 +98,7 @@ function getDeleteDisabledReason(args: Readonly<{
     }
 
     if (args.processingLock) {
-        return "Désactivé : vidéo en PROCESSING.";
+        return "Désactivé : vidéo en PENDING/PROCESSING.";
     }
 
     if (args.courseStatus !== "DRAFT") {
@@ -231,8 +253,9 @@ export default function EditCoursePage() {
                         {!isWaitingValidation && !isPublished && processingLock ? (
                             <div
                                 className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                                Édition désactivée : au moins une vidéo est en <strong>PROCESSING</strong>. Le polling
-                                backend/UI peut rafraîchir l'état du cours et écraser des changements non sauvegardés.
+                                Édition désactivée : au moins une vidéo est en <strong>PENDING/PROCESSING</strong>. Le
+                                polling backend/UI peut rafraîchir l&apos;état du cours et écraser des changements non
+                                sauvegardés.
                             </div>
                         ) : null}
 
@@ -265,9 +288,7 @@ export default function EditCoursePage() {
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
                             <Label>ID du cours</Label>
-                            <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm font-mono">
-                                {course.id}
-                            </div>
+                            <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm font-mono">{course.id}</div>
                         </div>
 
                         <div className="space-y-2">
@@ -324,16 +345,14 @@ export default function EditCoursePage() {
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
                             <Label>Créé le</Label>
-                            <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
-                                {formatDate(course.createdAt)}
-                            </div>
+                            <div
+                                className="rounded-md border bg-muted/40 px-3 py-2 text-sm">{formatDate(course.createdAt)}</div>
                         </div>
 
                         <div className="space-y-2">
                             <Label>Dernière mise à jour</Label>
-                            <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
-                                {formatDate(course.updatedAt)}
-                            </div>
+                            <div
+                                className="rounded-md border bg-muted/40 px-3 py-2 text-sm">{formatDate(course.updatedAt)}</div>
                         </div>
                     </div>
 
@@ -379,9 +398,7 @@ export default function EditCoursePage() {
                                 </AlertDialog>
 
                                 {deleteDisabledReason ? (
-                                    <div className="text-xs text-muted-foreground">
-                                        {deleteDisabledReason}
-                                    </div>
+                                    <div className="text-xs text-muted-foreground">{deleteDisabledReason}</div>
                                 ) : null}
                             </div>
                         </div>

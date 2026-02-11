@@ -1,8 +1,8 @@
-import {useCourseBuilder} from "@/layout/tutor/CourseBuilderLayout.tsx";
-import CourseSectionsEditor from "@/pages/tutor/course-builder/section/CourseSectionEditor.tsx";
+import {useCourseBuilder} from "@/layout/tutor";
+import CourseSectionEditor from "@/pages/tutor/course-builder/section/CourseSectionEditor.tsx";
 
 export default function SectionsPage() {
-    const {courseId, course, setCourse, refreshCourse} = useCourseBuilder();
+    const {course} = useCourseBuilder();
 
     if (!course) {
         return (
@@ -15,12 +15,5 @@ export default function SectionsPage() {
         );
     }
 
-    return (
-        <CourseSectionsEditor
-            courseId={courseId}
-            course={course as any}
-            setCourse={setCourse as any}
-            refreshCourse={refreshCourse}
-        />
-    );
+    return <CourseSectionEditor/>;
 }

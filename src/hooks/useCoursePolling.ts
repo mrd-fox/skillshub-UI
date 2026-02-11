@@ -1,11 +1,12 @@
-import {VideoStatusEnum} from "@/types/video.ts";
 import {useEffect, useMemo, useRef} from "react";
+import {hasInProgressVideo} from "@/lib/isVideoInProgress.ts";
+
 
 type CourseLike = {
     sections?: Array<{
         chapters?: Array<{
             video?: {
-                status?: VideoStatusEnum | string | null;
+                status?: string | null;
             } | null;
         }>;
     }>;
@@ -25,37 +26,19 @@ type Options = {
     enabled?: boolean;
 };
 
-function hasProcessingVideo(course: CourseLike | null | undefined): boolean {
-    if (!course?.sections || course.sections.length === 0) {
-        return false;
-    }
-
-    for (const section of course.sections) {
-        const chapters = section.chapters ?? [];
-        for (const chapter of chapters) {
-            const status = chapter.video?.status ?? null;
-            if (status === "PROCESSING") {
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
-function clearTimer(timerRef: React.MutableRefObject<number | null>) {
-    if (timerRef.current !== null) {
-        window.clearTimeout(timerRef.current);
-        timerRef.current = null;
+function clearTimer<T>(ref: { current: T | null }) {
+    if (ref.current !== null) {
+        globalThis.clearTimeout(ref.current as ReturnType<typeof globalThis.setTimeout>);
+        ref.current = null;
     }
 }
 
 /**
- * Polls refreshCourse() while at least one video is in PROCESSING state.
+ * Polls refreshCourse() while at least one video is in progress (PENDING or PROCESSING).
  *
- * Fix (critical):
+ * Critical behavior:
  * - Do NOT restart polling on every `course` update.
- * - Only react to `shouldPoll` boolean (enter/exit PROCESSING).
+ * - Only react to `shouldPoll` boolean (enter/exit in-progress).
  */
 export function useCoursePolling(
     course: CourseLike | null,
@@ -65,7 +48,7 @@ export function useCoursePolling(
     const enabled = options?.enabled ?? true;
     const intervalMs = options?.intervalMs ?? 3000;
 
-    const timerRef = useRef<number | null>(null);
+    const timerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
     const inFlightRef = useRef<boolean>(false);
 
     const courseRef = useRef<CourseLike | null>(course);
@@ -93,12 +76,12 @@ export function useCoursePolling(
     }, [intervalMs]);
 
     const shouldPoll = useMemo(() => {
-        return hasProcessingVideo(course);
+        return hasInProgressVideo(course);
     }, [course]);
 
     const scheduleNext = () => {
         clearTimer(timerRef);
-        timerRef.current = window.setTimeout(() => {
+        timerRef.current = globalThis.setTimeout(() => {
             void tick();
         }, intervalRef.current);
     };
@@ -109,8 +92,8 @@ export function useCoursePolling(
             return;
         }
 
-        const stillProcessing = hasProcessingVideo(courseRef.current);
-        if (!stillProcessing) {
+        const stillInProgress = hasInProgressVideo(courseRef.current);
+        if (!stillInProgress) {
             clearTimer(timerRef);
             return;
         }
@@ -146,7 +129,7 @@ export function useCoursePolling(
             return;
         }
 
-        // Start once when entering PROCESSING
+        // Start once when entering in-progress state
         void tick();
 
         return () => {

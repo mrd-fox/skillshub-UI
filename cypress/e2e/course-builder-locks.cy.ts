@@ -64,7 +64,7 @@ function openSectionAccordionByTitle(sectionTitle: string) {
         .click();
 }
 
-describe("Course Builder Locks (WAITING_VALIDATION / PROCESSING)", () => {
+describe("Course Builder Locks (WAITING_VALIDATION / PENDING / PROCESSING)", () => {
     beforeEach(() => {
         cy.clearCookies();
         cy.clearLocalStorage();
@@ -115,7 +115,7 @@ describe("Course Builder Locks (WAITING_VALIDATION / PROCESSING)", () => {
         cy.get("@publishCourse.all").should("have.length", 0);
     });
 
-    it("should block structure + save + publish when at least one video is PROCESSING (upload allowed only for persisted chapters)", () => {
+    it("should block structure + save + publish when at least one video is PROCESSING or PENDING (upload allowed only for persisted chapters)", () => {
         const courseId = "course-processing-1";
 
         const course: CourseResponse = {
@@ -169,6 +169,50 @@ describe("Course Builder Locks (WAITING_VALIDATION / PROCESSING)", () => {
         cy.contains(/upload|téléverser|uploader/i).should("exist");
 
         cy.contains("button", "Client chapter (unsaved)").click();
-        cy.contains(/L’upload vidéo est désactivé tant que le cours n’est pas sauvegardé/i).should("exist");
+        cy.contains(/L'upload vidéo est désactivé tant que le cours n'est pas sauvegardé/i).should("exist");
+    });
+
+    it("should block structure + save + publish when at least one video is PENDING (critical fix: INIT -> PENDING -> lock)", () => {
+        const courseId = "course-pending-1";
+
+        const course: CourseResponse = {
+            id: courseId,
+            title: "Course Pending Lock",
+            description: "desc",
+            status: "DRAFT",
+            price: 10,
+            sections: [
+                {
+                    id: "sec-1",
+                    title: "Section 1",
+                    position: 1,
+                    chapters: [
+                        {
+                            id: "ch-pending",
+                            title: "Chapter with PENDING video",
+                            position: 1,
+                            video: {id: "v-pending", status: "PENDING"},
+                        },
+                    ],
+                },
+            ],
+        };
+
+        visitSections(courseId, course);
+
+        // Global actions locked
+        cy.contains("button", "Enregistrer").should("be.disabled");
+        cy.contains("button", "Publier").should("be.disabled");
+
+        // Sidebar structure actions locked (always visible)
+        cy.contains("button", "+ Ajouter une section").should("be.disabled");
+
+        // "+ Ajouter un chapitre" is inside AccordionContent -> open the section first
+        openSectionAccordionByTitle("Section 1");
+        cy.contains("button", "+ Ajouter un chapitre").should("be.disabled");
+
+        // Ensure no mutation calls happened
+        cy.get("@putCourse.all").should("have.length", 0);
+        cy.get("@publishCourse.all").should("have.length", 0);
     });
 });

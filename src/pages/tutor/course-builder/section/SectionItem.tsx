@@ -6,12 +6,11 @@ import {Input} from "@/components/ui/input.tsx";
 import {Button} from "@/components/ui/button.tsx";
 import {cn} from "@/lib/utils.ts";
 
+import type {SectionResponse} from "@/layout/tutor";
+
 type Props = {
-    section: {
-        id: string;
-        title: string;
-        chapters: { id: string }[];
-    };
+    section: SectionResponse;
+
     index: number;
     total: number;
 
@@ -96,17 +95,14 @@ export default function SectionItem({
         setIsEditing(false);
     }
 
+    const chaptersCount = section.chapters?.length ?? 0;
+
     return (
         <AccordionItem
             value={section.id}
-            className={cn(
-                "w-full max-w-full overflow-hidden rounded-xl border",
-                "bg-muted/25"
-            )}
+            className={cn("w-full max-w-full overflow-hidden rounded-xl border", "bg-muted/25")}
         >
-            {/* HEADER: tools ABOVE title + chevron */}
             <div className="w-full max-w-full px-3 py-3">
-                {/* Row 1: Tools */}
                 <div className="flex w-full items-center justify-end gap-1 pb-2">
                     <Button
                         type="button"
@@ -128,6 +124,7 @@ export default function SectionItem({
                         type="button"
                         variant="ghost"
                         size="icon"
+                        data-cy="delete-section"
                         className="h-7 w-7 text-destructive hover:text-destructive"
                         disabled={readOnly}
                         aria-label="Delete section"
@@ -163,7 +160,6 @@ export default function SectionItem({
                     />
                 </div>
 
-                {/* Row 2: Title + chevron */}
                 <AccordionTrigger className="w-full min-w-0 py-0 no-underline hover:no-underline">
                     <div className="min-w-0 max-w-full text-left">
                         {isEditing ? (
@@ -191,7 +187,7 @@ export default function SectionItem({
                                     {index + 1}. {section.title || "Section sans titre"}
                                 </div>
                                 <div className="text-xs text-muted-foreground">
-                                    {section.chapters.length} chapitre{section.chapters.length > 1 ? "s" : ""}
+                                    {chaptersCount} chapitre{chaptersCount > 1 ? "s" : ""}
                                 </div>
                             </>
                         )}
@@ -199,7 +195,6 @@ export default function SectionItem({
                 </AccordionTrigger>
             </div>
 
-            {/* CONTENT */}
             <AccordionContent className="px-3 pb-4">
                 <div className="space-y-3 rounded-lg border bg-background p-3">
                     {children}
@@ -207,6 +202,7 @@ export default function SectionItem({
                     <Button
                         type="button"
                         variant="outline"
+                        data-cy="add-chapter"
                         className="w-full border-dashed text-muted-foreground hover:text-primary"
                         disabled={readOnly}
                         onClick={() => onAddChapter(section.id)}

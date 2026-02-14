@@ -4,13 +4,11 @@ import {Button} from "@/components/ui/button.tsx";
 import {Input} from "@/components/ui/input.tsx";
 import {MoveButton} from "@/components/MoveButton.tsx";
 import {cn} from "@/lib/utils.ts";
+import {ChapterResponse} from "@/layout/tutor";
 
 type Props = {
-    chapter: {
-        id: string;
-        title: string;
-        video?: any | null;
-    };
+    chapter: ChapterResponse;
+
     index: number;
     total: number;
     isSelected: boolean;
@@ -44,14 +42,11 @@ export default function ChapterItem({
     const canMoveUp = index > 0;
     const canMoveDown = index < total - 1;
 
-    // Keep local draft stable across polling refreshes.
-    // Only reset when the chapter identity changes.
     useEffect(() => {
         setDraftTitle(chapter.title ?? "");
         setIsEditing(false);
     }, [chapter.id]);
 
-    // If backend/UI enters readOnly, force-stop editing.
     useEffect(() => {
         if (readOnly) {
             setIsEditing(false);
@@ -59,7 +54,6 @@ export default function ChapterItem({
         }
     }, [readOnly, chapter.title]);
 
-    // If not editing, reflect external title changes (rare).
     useEffect(() => {
         if (!isEditing) {
             setDraftTitle(chapter.title ?? "");
@@ -111,7 +105,6 @@ export default function ChapterItem({
                 isSelected ? "border-primary/50 bg-primary/5" : "border-muted/60 hover:bg-muted/30"
             )}
         >
-            {/* Selection / title (selection stays enabled even in readOnly) */}
             <button
                 type="button"
                 className={cn(
@@ -158,7 +151,6 @@ export default function ChapterItem({
                 )}
             </button>
 
-            {/* Actions */}
             <div className="flex items-center gap-1">
                 <Button
                     type="button"

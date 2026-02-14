@@ -1,9 +1,9 @@
 // cypress/e2e/course-builder-locks.cy.ts
 /// <reference types="cypress" />
 
-import type {AuthMeResponse, CourseResponse, InternalUserEnvelope,} from "../support/cypress-types";
+import type {AuthMeResponse, CourseResponse, InternalUserEnvelope} from "../support/cypress-types";
 
-function mockAuthAsTutor() {
+function mockAuthAsTutor(): void {
     const auth: AuthMeResponse = {
         id: "auth-user-123",
         email: "tutor@test.com",
@@ -23,29 +23,21 @@ function mockAuthAsTutor() {
         },
     };
 
-    cy.intercept("GET", "**/auth/me", {
-        statusCode: 200,
-        body: auth,
-    }).as("authMe");
-
-    cy.intercept("GET", "**/users/me", {
-        statusCode: 200,
-        body: envelope,
-    }).as("usersMe");
+    cy.intercept("GET", "**/auth/me", {statusCode: 200, body: auth}).as("authMe");
+    cy.intercept("GET", "**/users/me", {statusCode: 200, body: envelope}).as("usersMe");
 }
 
-function visitSections(courseId: string, course: CourseResponse) {
-    cy.intercept("GET", `**/course/${courseId}`, {
+function visitSections(courseId: string, course: CourseResponse): void {
+    cy.intercept("GET", new RegExp(`.*/course(s)?/${courseId}$`), {
         statusCode: 200,
         body: course,
     }).as("getCourse");
 
-    // Mutations are intercepted to guarantee CI safety and to assert "no mutation" when locked
-    cy.intercept("PUT", `**/course/${courseId}`, (req) => {
+    cy.intercept("PUT", new RegExp(`.*/course(s)?/${courseId}$`), (req) => {
         req.reply({statusCode: 200, body: course});
     }).as("putCourse");
 
-    cy.intercept("POST", `**/course/${courseId}/publish`, (req) => {
+    cy.intercept("POST", new RegExp(`.*/course(s)?/${courseId}/publish$`), (req) => {
         req.reply({statusCode: 200, body: {}});
     }).as("publishCourse");
 
@@ -56,15 +48,13 @@ function visitSections(courseId: string, course: CourseResponse) {
     cy.wait("@getCourse");
 }
 
-function openSectionAccordionByTitle(sectionTitle: string) {
-    // SectionItem renders the title like: "{index + 1}. {section.title}"
-    // We click the visible header to open AccordionContent.
+function openSectionAccordionByTitle(sectionTitle: string): void {
     cy.contains(new RegExp(`\\b${sectionTitle}\\b`, "i"))
         .should("be.visible")
         .click();
 }
 
-describe("Course Builder Locks (WAITING_VALIDATION / PROCESSING)", () => {
+describe("Course Builder Locks (WAITING_VALIDATION / PENDING / PROCESSING)", () => {
     beforeEach(() => {
         cy.clearCookies();
         cy.clearLocalStorage();
@@ -99,23 +89,19 @@ describe("Course Builder Locks (WAITING_VALIDATION / PROCESSING)", () => {
 
         visitSections(courseId, course);
 
-        // Global actions locked
         cy.contains("button", "Enregistrer").should("be.disabled");
         cy.contains("button", "Publier").should("be.disabled");
 
-        // Sidebar structure actions locked (always visible)
         cy.contains("button", "+ Ajouter une section").should("be.disabled");
 
-        // "+ Ajouter un chapitre" is inside AccordionContent -> open the section first
         openSectionAccordionByTitle("Section 1");
         cy.contains("button", "+ Ajouter un chapitre").should("be.disabled");
 
-        // Ensure no mutation calls happened
         cy.get("@putCourse.all").should("have.length", 0);
         cy.get("@publishCourse.all").should("have.length", 0);
     });
 
-    it("should block structure + save + publish when at least one video is PROCESSING (upload allowed only for persisted chapters)", () => {
+    it("should block structure + save + publish when at least one video is PROCESSING or PENDING (upload allowed only for persisted chapters)", () => {
         const courseId = "course-processing-1";
 
         const course: CourseResponse = {
@@ -153,22 +139,61 @@ describe("Course Builder Locks (WAITING_VALIDATION / PROCESSING)", () => {
         cy.contains("button", "Enregistrer").should("be.disabled");
         cy.contains("button", "Publier").should("be.disabled");
 
-        // Sidebar structure actions locked (always visible)
+        // Sidebar structure actions locked
         cy.contains("button", "+ Ajouter une section").should("be.disabled");
 
-        // "+ Ajouter un chapitre" is inside AccordionContent -> open the section first
         openSectionAccordionByTitle("Section 1");
         cy.contains("button", "+ Ajouter un chapitre").should("be.disabled");
 
-        // Ensure no mutation calls happened
+        // No mutation calls
         cy.get("@putCourse.all").should("have.length", 0);
         cy.get("@publishCourse.all").should("have.length", 0);
 
-        // Upload behavior checks (kept resilient, based on visible UX text)
+        // Select persisted chapter
         cy.contains("button", "Persisted chapter (processing)").click();
-        cy.contains(/upload|téléverser|uploader/i).should("exist");
 
-        cy.contains("button", "Client chapter (unsaved)").click();
-        cy.contains(/L’upload vidéo est désactivé tant que le cours n’est pas sauvegardé/i).should("exist");
+        // Upload exists but edition locked message must be visible
+        cy.contains("button", /upload|téléverser|uploader/i).should("exist");
+        cy.contains(/upload et suppression désactivés\s*:\s*édition verrouillée/i).should("exist");
+    });
+
+    it("should block structure + save + publish when at least one video is PENDING (critical fix: INIT -> PENDING -> lock)", () => {
+        const courseId = "course-pending-1";
+
+        const course: CourseResponse = {
+            id: courseId,
+            title: "Course Pending Lock",
+            description: "desc",
+            status: "DRAFT",
+            price: 10,
+            sections: [
+                {
+                    id: "sec-1",
+                    title: "Section 1",
+                    position: 1,
+                    chapters: [
+                        {
+                            id: "ch-pending",
+                            title: "Chapter with PENDING video",
+                            position: 1,
+                            video: {id: "v-pending", status: "PENDING"},
+                        },
+                    ],
+                },
+            ],
+        };
+
+        visitSections(courseId, course);
+
+        cy.contains("button", "Enregistrer").should("be.disabled");
+        cy.contains("button", "Publier").should("be.disabled");
+
+        cy.contains("button", "+ Ajouter une section").should("be.disabled");
+
+        openSectionAccordionByTitle("Section 1");
+        cy.contains("button", "+ Ajouter un chapitre").should("be.disabled");
+
+        cy.get("@putCourse.all").should("have.length", 0);
+        cy.get("@publishCourse.all").should("have.length", 0);
     });
 });

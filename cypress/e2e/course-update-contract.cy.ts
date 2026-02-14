@@ -56,20 +56,6 @@ describe("Course Update Contract (mocked)", () => {
     }
 
 
-    function openSidebarIfClosed(): void {
-        cy.get("body").then(($body) => {
-            const addVisible = $body.find('[data-cy="add-section"]:visible').length > 0;
-
-            if (addVisible) {
-                // Sidebar already open -> do nothing
-            } else {
-                cy.get('[data-cy="toggle-course-sidebar"]').should("be.visible").click();
-            }
-        });
-
-        cy.get('[data-cy="add-section"]').should("be.visible");
-    }
-
     beforeEach(() => {
         cy.viewport(1440, 900); // ✅ ensures sidebar/layout is rendered in desktop mode
 

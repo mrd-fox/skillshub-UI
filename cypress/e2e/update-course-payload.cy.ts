@@ -59,6 +59,10 @@ function visitSections(courseId: string, course: CourseResponse): {
     };
 }
 
+function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function openSectionAccordionByTitle(sectionTitle: string): void {
     // SectionItem renders the title like: "{index + 1}. {section.title}"
     // Click on the trigger line containing the title
@@ -81,16 +85,6 @@ function assertAddChapterLockedInSection(sectionTitle: string): void {
     cy.contains("button", "+ Ajouter un chapitre").should("be.disabled");
 }
 
-function openChapterInSidebarByTitle(chapterTitle: string): void {
-    // Chapter button contains "Chapitre X — {title}"
-    cy.contains("button", new RegExp(`\\b${escapeRegExp(chapterTitle)}\\b`, "i"))
-        .should("be.visible")
-        .click();
-}
-
-function escapeRegExp(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 describe("Course Builder Locks (WAITING_VALIDATION / PROCESSING)", () => {
     beforeEach(() => {

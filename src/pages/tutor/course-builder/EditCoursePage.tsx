@@ -42,14 +42,7 @@ function isVideoInProgress(status: unknown): boolean {
         return false;
     }
 
-    if (status === "PENDING") {
-        return true;
-    }
-    if (status === "PROCESSING") {
-        return true;
-    }
-
-    return false;
+    return status === "PENDING" || status === "PROCESSING";
 }
 
 /**
@@ -151,19 +144,7 @@ export default function EditCoursePage() {
             return false;
         }
 
-        if (isWaitingValidation) {
-            return false;
-        }
-
-        if (isPublished) {
-            return false;
-        }
-
-        if (processingLock) {
-            return false;
-        }
-
-        return true;
+        return !isWaitingValidation && !isPublished && !processingLock;
     }, [course, isWaitingValidation, isPublished, processingLock]);
 
     const canDeleteDraft = useMemo(() => {

@@ -18,6 +18,9 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog.tsx";
 import {Button} from "@/components/ui/button.tsx";
+import {courseService} from "@/api/services";
+import {toast} from "sonner";
+import {useNavigate} from "react-router-dom";
 
 type VideoStatus = string | null | undefined;
 
@@ -111,8 +114,9 @@ function getDeleteDisabledReason(args: Readonly<{
 export default function EditCoursePage() {
     const {course, setCourse, loading} = useCourseBuilder();
     const {internalUser} = useAuth();
+    const navigate = useNavigate();
 
-    const [deleteUiDone, setDeleteUiDone] = useState<boolean>(false);
+    const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
     const authorLabel = useMemo(() => {
         if (!internalUser) {
@@ -195,6 +199,24 @@ export default function EditCoursePage() {
         });
     }, [canDeleteDraft, course?.status, isWaitingValidation, isPublished, processingLock]);
 
+    async function handleDeleteCourse(): Promise<void> {
+        if (!course?.id) {
+            return;
+        }
+
+        setIsDeleting(true);
+
+        try {
+            await courseService.deleteCourse(course.id);
+            toast.success("Cours supprimé.");
+            navigate("/dashboard/tutor/courses");
+        } catch {
+            toast.error("Une erreur est survenue. Réessayez plus tard.");
+        } finally {
+            setIsDeleting(false);
+        }
+    }
+
     if (loading) {
         return (
             <div className="space-y-6">
@@ -256,13 +278,6 @@ export default function EditCoursePage() {
                                 Édition désactivée : au moins une vidéo est en <strong>PENDING/PROCESSING</strong>. Le
                                 polling backend/UI peut rafraîchir l&apos;état du cours et écraser des changements non
                                 sauvegardés.
-                            </div>
-                        ) : null}
-
-                        {deleteUiDone ? (
-                            <div
-                                className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-                                UI delete : action confirmée (aucun appel backend effectué).
                             </div>
                         ) : null}
                     </div>
@@ -356,21 +371,20 @@ export default function EditCoursePage() {
                         </div>
                     </div>
 
-                    {/* Delete draft (UI only) */}
+                    {/* Delete draft */}
                     <div className="pt-2">
                         <div className="rounded-lg border p-4">
                             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
                                     <div className="text-sm font-semibold">Zone dangereuse</div>
                                     <div className="mt-1 text-xs text-muted-foreground">
-                                        Supprimer le cours (brouillon uniquement). Pour l’instant : UI uniquement, pas
-                                        d’appel backend.
+                                        Supprimer le cours (brouillon uniquement).
                                     </div>
                                 </div>
 
                                 <AlertDialog>
                                     <AlertDialogTrigger asChild>
-                                        <Button variant="destructive" disabled={!canDeleteDraft}>
+                                        <Button variant="destructive" disabled={!canDeleteDraft || isDeleting}>
                                             Delete draft
                                         </Button>
                                     </AlertDialogTrigger>
@@ -379,19 +393,20 @@ export default function EditCoursePage() {
                                         <AlertDialogHeader>
                                             <AlertDialogTitle>Supprimer ce brouillon ?</AlertDialogTitle>
                                             <AlertDialogDescription>
-                                                Cette action est destructive. Pour le moment, elle ne déclenche aucun
-                                                appel backend (UI uniquement).
+                                                Cette action est destructive et irréversible.
                                             </AlertDialogDescription>
                                         </AlertDialogHeader>
 
                                         <AlertDialogFooter>
-                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
                                             <AlertDialogAction
-                                                onClick={() => {
-                                                    setDeleteUiDone(true);
+                                                disabled={isDeleting}
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    handleDeleteCourse();
                                                 }}
                                             >
-                                                Confirm
+                                                {isDeleting ? "Suppression..." : "Confirm"}
                                             </AlertDialogAction>
                                         </AlertDialogFooter>
                                     </AlertDialogContent>

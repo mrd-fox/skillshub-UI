@@ -59,4 +59,15 @@ export const userService = {
             active: user.active,
         };
     },
+
+    /**
+     * Enroll current user in a course (idempotent)
+     * PUT /users/me/enrollments/:courseId
+     *
+     * @param courseId - The course ID to enroll in
+     * @throws {ApiError} If enrollment fails
+     */
+    async enrollInCourse(courseId: string): Promise<void> {
+        await api.put(API_ENDPOINTS.USERS.ENROLL(courseId));
+    },
 };

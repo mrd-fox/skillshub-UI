@@ -55,6 +55,12 @@ export const API_ENDPOINTS = {
          * POST /users/promote-to-tutor
          */
         PROMOTE_TO_TUTOR: "/users/promote-to-tutor",
+
+        /**
+         * Enroll current user in a course (idempotent)
+         * PUT /users/me/enrollments/:courseId
+         */
+        ENROLL: (courseId: string) => `/users/me/enrollments/${courseId}`,
     },
 
     // ============================================
@@ -190,7 +196,7 @@ export const API_ENDPOINTS = {
  * Used by axios interceptor to prevent auth redirects on public pages
  */
 export function isPublicEndpoint(url: string): boolean {
-    return url.includes("/api/public/");
+    return url.includes("/public");
 }
 
 /**
@@ -198,5 +204,5 @@ export function isPublicEndpoint(url: string): boolean {
  * Used by axios interceptor to prevent redirect loops
  */
 export function isAuthEndpoint(url: string): boolean {
-    return url.includes("/api/auth/login") || url.includes("/api/auth/logout");
+    return url.includes("/auth/login") || url.includes("/auth/logout");
 }

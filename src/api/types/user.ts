@@ -14,6 +14,7 @@ export type InternalUserResponse = {
     email: string;
     active: boolean;
     roles: RoleResponse[];
+    enrolledCourseIds?: string[];
 };
 
 export type InternalUserEnvelope = {
@@ -26,6 +27,7 @@ export type InternalUser = {
     keycloakId: string;
     email: string;
     roles: string[];
+    enrolledCourseIds: string[];
     firstName?: string | null;
     lastName?: string | null;
     active?: boolean;

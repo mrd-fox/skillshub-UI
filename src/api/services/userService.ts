@@ -25,6 +25,7 @@ export const userService = {
             keycloakId: user.externalId,
             email: user.email,
             roles: (user.roles ?? []).map((r) => r.name),
+            enrolledCourseIds: user.enrolledCourseIds ?? [],
             firstName: user.firstName,
             lastName: user.lastName,
             active: user.active,
@@ -45,19 +46,14 @@ export const userService = {
         );
 
         const envelope = res.data;
-        const user = envelope.user ?? envelope;
-
-        // Normalize roles (can be string[] or RoleResponse[])
-        const rawRoles = user.roles ?? [];
-        const roles = rawRoles.map((r: any) =>
-            typeof r === "string" ? r : r.name
-        );
+        const user = envelope.user;
 
         return {
             id: user.id,
             keycloakId: user.externalId,
             email: user.email,
-            roles,
+            roles: (user.roles ?? []).map((r) => r.name),
+            enrolledCourseIds: user.enrolledCourseIds ?? [],
             firstName: user.firstName,
             lastName: user.lastName,
             active: user.active,

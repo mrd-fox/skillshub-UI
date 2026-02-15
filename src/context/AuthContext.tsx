@@ -1,5 +1,8 @@
 import {createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState} from "react";
 import api, {ApiError} from "@/api/axios";
+import {InternalUser} from "@/api/types/user";
+import {API_ENDPOINTS} from "@/api/endpoints";
+import {userService} from "@/api/services/userService";
 
 export interface AuthContextType {
     loading: boolean;
@@ -46,34 +49,6 @@ interface AuthUser {
     roles: string[];
 }
 
-interface RoleResponse {
-    name: string;
-}
-
-interface InternalUserResponse {
-    id: string;
-    externalId: string;
-    firstName: string | null;
-    lastName: string | null;
-    email: string;
-    active: boolean;
-    roles: RoleResponse[];
-}
-
-interface InternalUserEnvelope {
-    created: boolean;
-    user: InternalUserResponse;
-}
-
-interface InternalUser {
-    id: string;
-    keycloakId: string;
-    email: string;
-    roles: string[];
-    firstName?: string | null;
-    lastName?: string | null;
-    active?: boolean;
-}
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -152,7 +127,7 @@ export function AuthProvider({children}: { children: ReactNode }) {
         setIsLoggingOut(false);
         globalThis.sessionStorage?.removeItem("isLoggingOut");
 
-        globalThis.location.assign(`${API_ROOT}/auth/login`);
+        globalThis.location.assign(`${API_ROOT}${API_ENDPOINTS.AUTH.LOGIN}`);
     }, [API_ROOT]);
 
     const logout = useCallback(() => {
@@ -168,7 +143,7 @@ export function AuthProvider({children}: { children: ReactNode }) {
         setProfileError(null);
 
         // Redirect to backend logout endpoint
-        globalThis.location.assign(`${API_ROOT}/auth/logout`);
+        globalThis.location.assign(`${API_ROOT}${API_ENDPOINTS.AUTH.LOGOUT}`);
     }, [API_ROOT]);
 
     const clearAuthError = useCallback(() => {
@@ -199,7 +174,7 @@ export function AuthProvider({children}: { children: ReactNode }) {
             // Phase 1: session (/auth/me)
             // -------------------------
             try {
-                const authRes = await api.get<AuthUser>("/auth/me");
+                const authRes = await api.get<AuthUser>(API_ENDPOINTS.AUTH.ME);
 
                 if (cancelled) {
                     return;
@@ -245,31 +220,16 @@ export function AuthProvider({children}: { children: ReactNode }) {
             // Phase 2: profile (/users/me)
             // -------------------------
             try {
-                const userRes = await api.get<InternalUserEnvelope>("/users/me");
+                const mappedInternal = await userService.getMyProfile();
 
                 if (cancelled) {
                     return;
                 }
 
                 setProfileError(null);
-
-                const envelope = userRes.data;
-                const user = envelope.user;
-
-                const assignedRoles = (user.roles ?? []).map((r) => r.name);
-
-                const mappedInternal: InternalUser = {
-                    id: user.id,
-                    keycloakId: user.externalId,
-                    email: user.email,
-                    roles: assignedRoles,
-                    firstName: user.firstName,
-                    lastName: user.lastName,
-                    active: user.active,
-                };
-
                 setInternalUser(mappedInternal);
 
+                const assignedRoles = mappedInternal.roles;
                 const defaultRole = resolveDefaultRole(assignedRoles);
                 const currentActiveRole = activeRoleRef.current;
 

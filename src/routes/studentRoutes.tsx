@@ -1,9 +1,12 @@
-// src/routes/studentRoutes.tsx
+/**
+ * Student routes
+ * Defines routing for student dashboard
+ */
+
 import {Navigate, RouteObject} from "react-router-dom";
 import ProtectedRoute from "@/routes/ProtectedRoute.tsx";
 import StudentLayout from "@/layout/student/StudentLayout.tsx";
-
-const StudentDashboard = () => <div className="p-6">🎓 Student Dashboard</div>;
+import StudentDashboardPage from "@/pages/student/StudentDashboardPage.tsx";
 
 export const studentRoutes: RouteObject = {
     path: "/dashboard/student",
@@ -13,7 +16,7 @@ export const studentRoutes: RouteObject = {
         </ProtectedRoute>
     ),
     children: [
-        {index: true, element: <StudentDashboard/>},
+        {index: true, element: <StudentDashboardPage/>},
         {path: "*", element: <Navigate to="/dashboard/student" replace/>},
     ],
 };

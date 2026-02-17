@@ -105,6 +105,17 @@ export const API_ENDPOINTS = {
     },
 
     // ============================================
+    // Course Search (Batch operations)
+    // ============================================
+    COURSE_SEARCH: {
+        /**
+         * Search courses by IDs (for enrolled courses)
+         * POST /courses/search
+         */
+        BY_IDS: "/courses/search",
+    },
+
+    // ============================================
     // Sections
     // ============================================
     SECTIONS: {

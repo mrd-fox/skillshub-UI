@@ -6,6 +6,7 @@
 import api from "@/api/axios";
 import {API_ENDPOINTS} from "@/api/endpoints";
 import {Course, CourseListItem, CreateCoursePayload, UpdateCoursePayload} from "@/api/types/course";
+import {PublicCourseListItem} from "@/api/types/public";
 
 export const courseService = {
     /**
@@ -89,4 +90,27 @@ export const courseService = {
         );
         return res.data;
     },
+
+    /**
+     * Search courses by IDs
+     * POST /courses/search
+     *
+     * @param ids Array of course IDs to search for
+     * @returns List of courses matching the provided IDs
+     * @throws {ApiError} If request fails or user unauthorized
+     */
+    async searchCoursesByIds(ids: string[]): Promise<PublicCourseListItem[]> {
+        if (ids.length === 0) {
+            return [];
+        }
+
+        const res = await api.post<PublicCourseListItem[]>(
+            API_ENDPOINTS.COURSE_SEARCH.BY_IDS,
+            {ids}
+        );
+
+        return Array.isArray(res.data) ? res.data : [];
+    },
 };
+
+

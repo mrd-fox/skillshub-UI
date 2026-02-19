@@ -475,7 +475,7 @@ export default function ChapterVideoPanel(props: Readonly<Props>) {
                                                 <div className="h-full w-full">
                                                     <VimeoPlayer
                                                         sourceUri={sourceUri}
-                                                        embedHash={(video as any)?.embedHash ?? null}
+                                                        embedHash={video?.embedHash ?? null}
                                                         thumbnailUrl={video?.thumbnailUrl ?? null}
                                                         minimalUi={true}
                                                         autoplay={false}

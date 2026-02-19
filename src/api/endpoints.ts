@@ -116,6 +116,22 @@ export const API_ENDPOINTS = {
     },
 
     // ============================================
+    // Student Courses (enrolled content access)
+    // ============================================
+    STUDENT: {
+        /**
+         * Get enrolled course content (sections, chapters, videos)
+         * GET /student/courses/:courseId
+         *
+         * Backend enforces:
+         * - User must be enrolled
+         * - Course must be PUBLISHED
+         * - Returns full course structure with video metadata
+         */
+        COURSE_BY_ID: (courseId: string) => `/student/courses/${courseId}`,
+    },
+
+    // ============================================
     // Sections
     // ============================================
     SECTIONS: {

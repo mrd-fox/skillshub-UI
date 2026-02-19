@@ -8,10 +8,10 @@ import {useEffect, useMemo, useState} from "react";
 import {useNavigate} from "react-router-dom";
 import {useAuth} from "@/context/AuthContext";
 import {courseService} from "@/api/services/courseService";
-import {PublicCourseListItem} from "@/api/types/public";
 import {CourseCatalogGrid} from "@/components/catalog/CourseCatalogGrid";
 import {Button} from "@/components/ui/button";
 import {ApiError} from "@/api/axios";
+import {PublicCourseListItem} from "@/api/types/public.ts";
 
 function isApiError(e: unknown): e is ApiError {
     if (!e || typeof e !== "object") {
@@ -25,11 +25,9 @@ function errorMessage(e: unknown): string {
     if (isApiError(e)) {
         return e.message;
     }
-
     if (e instanceof Error && e.message.trim().length > 0) {
         return e.message;
     }
-
     return "Impossible de charger vos cours.";
 }
 
@@ -41,18 +39,27 @@ export default function StudentMyCoursesPage() {
     const [courses, setCourses] = useState<PublicCourseListItem[]>([]);
     const [error, setError] = useState<string | null>(null);
 
-    const enrolledCourseIds = internalUser?.enrolledCourseIds ?? [];
-    const idsKey = enrolledCourseIds.join("|");
+    const enrolledCourseIds = useMemo(() => {
+        return internalUser?.enrolledCourseIds ?? [];
+    }, [internalUser?.enrolledCourseIds]);
 
     useEffect(() => {
         let cancelled = false;
 
-        async function loadEnrolledCourses(): Promise<void> {
-            const ids = idsKey.length > 0 ? idsKey.split("|") : [];
+        async function load(): Promise<void> {
+            // 1) Wait until profile is loaded
+            if (!internalUser) {
+                setLoading(true);
+                setCourses([]);
+                setError(null);
+                return;
+            }
 
-            if (ids.length === 0) {
+            // 2) Empty enrollments => empty state (no API call)
+            if (enrolledCourseIds.length === 0) {
                 setLoading(false);
                 setCourses([]);
+                setError(null);
                 return;
             }
 
@@ -60,17 +67,11 @@ export default function StudentMyCoursesPage() {
             setError(null);
 
             try {
-                const data = await courseService.searchCoursesByIds(ids);
+                const data = await courseService.searchCoursesByIds(enrolledCourseIds);
 
                 if (!cancelled) {
-                    const filtered = data.filter((item) => {
-                        const candidate = item as PublicCourseListItem & { status?: string };
-                        if (candidate.status) {
-                            return candidate.status === "PUBLISHED";
-                        }
-                        return true;
-                    });
-                    setCourses(filtered);
+                    // Backend already enforces entitlement + published-only.
+                    setCourses(data);
                 }
             } catch (e: unknown) {
                 if (!cancelled) {
@@ -84,18 +85,18 @@ export default function StudentMyCoursesPage() {
             }
         }
 
-        void loadEnrolledCourses();
+        void load();
 
         return () => {
             cancelled = true;
         };
-    }, [idsKey]);
+    }, [internalUser, enrolledCourseIds]);
 
     const sortedCourses = useMemo(() => {
         return [...courses].sort((a, b) => (a.title ?? "").localeCompare(b.title ?? ""));
     }, [courses]);
 
-    function handleOpenDetails(courseId: string): void {
+    function handleOpen(courseId: string): void {
         navigate(`/dashboard/student/courses/${courseId}`);
     }
 
@@ -110,7 +111,7 @@ export default function StudentMyCoursesPage() {
                     <h1 className="text-3xl font-bold">Mes cours</h1>
                 </header>
                 <section className="rounded-lg border bg-muted/10 p-4 text-sm text-muted-foreground">
-                    Utilisateur non authentifié.
+                    Chargement du profil...
                 </section>
             </main>
         );
@@ -149,7 +150,7 @@ export default function StudentMyCoursesPage() {
             <section>
                 <CourseCatalogGrid
                     courses={sortedCourses}
-                    onOpenDetails={handleOpenDetails}
+                    onOpenDetails={handleOpen}
                     loading={loading}
                     error={error}
                 />

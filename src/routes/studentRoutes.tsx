@@ -8,6 +8,7 @@ import ProtectedRoute from "@/routes/ProtectedRoute.tsx";
 import StudentLayout from "@/layout/student/StudentLayout.tsx";
 import StudentDashboardPage from "@/pages/student/StudentDashboardPage.tsx";
 import StudentMyCoursesPage from "@/pages/student/StudentMyCoursesPage.tsx";
+import StudentCourseViewerPage from "@/pages/student/StudentCourseViewerPage.tsx";
 
 export const studentRoutes: RouteObject = {
     path: "/dashboard/student",
@@ -19,7 +20,7 @@ export const studentRoutes: RouteObject = {
     children: [
         {index: true, element: <StudentDashboardPage/>},
         {path: "courses", element: <StudentMyCoursesPage/>},
-        {path: "courses/:courseId", element: <Navigate to="/dashboard/student/courses" replace/>},
+        {path: "courses/:courseId", element: <StudentCourseViewerPage/>},
         {path: "*", element: <Navigate to="/dashboard/student" replace/>},
     ],
 };

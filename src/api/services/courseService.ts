@@ -8,6 +8,25 @@ import {API_ENDPOINTS} from "@/api/endpoints";
 import {Course, CourseListItem, CreateCoursePayload, UpdateCoursePayload} from "@/api/types/course";
 import {PublicCourseListItem} from "@/api/types/public";
 
+type CourseSearchResponseItem = {
+    id: string;
+    title: string;
+    description?: string | null;
+    status?: string;
+    sections?: unknown;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+};
+
+function mapSearchItemToPublicListItem(item: CourseSearchResponseItem): PublicCourseListItem {
+    return {
+        id: item.id,
+        title: item.title,
+        author: null,
+        price: null,
+    };
+}
+
 export const courseService = {
     /**
      * Get all courses for current tutor
@@ -95,8 +114,11 @@ export const courseService = {
      * Search courses by IDs
      * POST /courses/search
      *
+     * Backend returns CourseResponse[].
+     * UI wants catalog-like cards, so we normalize here.
+     *
      * @param ids Array of course IDs to search for
-     * @returns List of courses matching the provided IDs
+     * @returns List of courses matching the provided IDs (normalized for catalog cards)
      * @throws {ApiError} If request fails or user unauthorized
      */
     async searchCoursesByIds(ids: string[]): Promise<PublicCourseListItem[]> {
@@ -104,13 +126,30 @@ export const courseService = {
             return [];
         }
 
-        const res = await api.post<PublicCourseListItem[]>(
+        const res = await api.post<CourseSearchResponseItem[]>(
             API_ENDPOINTS.COURSE_SEARCH.BY_IDS,
             {ids}
         );
 
-        return Array.isArray(res.data) ? res.data : [];
+        const data = Array.isArray(res.data) ? res.data : [];
+        return data.map(mapSearchItemToPublicListItem);
+    },
+
+    /**
+     * Get enrolled course content (student)
+     * GET /student/courses/:courseId
+     *
+     * Backend enforces:
+     * - User must be enrolled in the course
+     * - Course must be PUBLISHED
+     * - Returns full course structure with sections, chapters, and videos
+     *
+     * @param courseId Course ID
+     * @returns Full course with sections, chapters, and video metadata
+     * @throws {ApiError} If not enrolled, course not found, or not published
+     */
+    async getEnrolledCourseById(courseId: string): Promise<Course> {
+        const res = await api.get<Course>(API_ENDPOINTS.STUDENT.COURSE_BY_ID(courseId));
+        return res.data;
     },
 };
-
-

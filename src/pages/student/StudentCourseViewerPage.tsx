@@ -9,7 +9,7 @@ import {useNavigate, useParams} from "react-router-dom";
 import {ArrowLeft, ChevronRight, PlayCircle} from "lucide-react";
 import {useAuth} from "@/context/AuthContext";
 import {courseService} from "@/api/services/courseService";
-import {Course} from "@/api/types/course";
+import {StudentCourseResponse} from "@/api/types/student";
 import {Button} from "@/components/ui/button";
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
 import {SkeletonLoader} from "@/components/ui/SkeletonLoader";
@@ -41,24 +41,13 @@ function errorMessage(e: unknown): string {
     return "Impossible de charger le cours.";
 }
 
-function buildSourceUri(sourceUri: string | null | undefined): string | null {
-    if (!sourceUri) {
-        return null;
-    }
-    const match = /^vimeo:\/\/(\d+)$/.exec(sourceUri);
-    if (!match) {
-        return null;
-    }
-    return match[1];
-}
-
 export default function StudentCourseViewerPage() {
     const {courseId} = useParams<{ courseId: string }>();
     const navigate = useNavigate();
     const {internalUser} = useAuth();
 
     const [loading, setLoading] = useState<boolean>(true);
-    const [course, setCourse] = useState<Course | null>(null);
+    const [course, setCourse] = useState<StudentCourseResponse | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
@@ -78,17 +67,19 @@ export default function StudentCourseViewerPage() {
             setError(null);
 
             try {
-                const data = await courseService.getEnrolledCourseById(courseId);
+                const data = await courseService.getStudentCourseById(courseId);
 
                 if (!cancelled) {
                     setCourse(data);
 
                     if (data.sections && data.sections.length > 0) {
-                        const firstSection = data.sections[0];
+                        const sortedSections = [...data.sections].sort((a, b) => a.position - b.position);
+                        const firstSection = sortedSections[0];
                         setSelectedSectionId(firstSection.id);
 
                         if (firstSection.chapters && firstSection.chapters.length > 0) {
-                            setSelectedChapterId(firstSection.chapters[0].id);
+                            const sortedChapters = [...firstSection.chapters].sort((a, b) => a.position - b.position);
+                            setSelectedChapterId(sortedChapters[0].id);
                         }
                     }
                 }
@@ -133,10 +124,7 @@ export default function StudentCourseViewerPage() {
     }, [course, selectedSectionId, selectedChapterId]);
 
     const videoSourceUri = useMemo(() => {
-        if (!selectedChapter?.video?.sourceUri) {
-            return null;
-        }
-        return buildSourceUri(selectedChapter.video.sourceUri);
+        return selectedChapter?.video?.sourceUri ?? null;
     }, [selectedChapter]);
 
     function handleGoBack(): void {

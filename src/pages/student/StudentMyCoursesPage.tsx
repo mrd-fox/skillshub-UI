@@ -11,7 +11,7 @@ import {courseService} from "@/api/services/courseService";
 import {CourseCatalogGrid} from "@/components/catalog/CourseCatalogGrid";
 import {Button} from "@/components/ui/button";
 import {ApiError} from "@/api/axios";
-import {PublicCourseListItem} from "@/api/types/public.ts";
+import {PublicCourseListItem} from "@/api/types/public";
 
 function isApiError(e: unknown): e is ApiError {
     if (!e || typeof e !== "object") {
@@ -43,6 +43,10 @@ export default function StudentMyCoursesPage() {
         return internalUser?.enrolledCourseIds ?? [];
     }, [internalUser?.enrolledCourseIds]);
 
+    const idsKey = useMemo(() => {
+        return enrolledCourseIds.join("|");
+    }, [enrolledCourseIds]);
+
     useEffect(() => {
         let cancelled = false;
 
@@ -70,7 +74,7 @@ export default function StudentMyCoursesPage() {
                 const data = await courseService.searchCoursesByIds(enrolledCourseIds);
 
                 if (!cancelled) {
-                    // Backend already enforces entitlement + published-only.
+                    // Backend already enforces PUBLISHED-only filtering
                     setCourses(data);
                 }
             } catch (e: unknown) {
@@ -90,7 +94,7 @@ export default function StudentMyCoursesPage() {
         return () => {
             cancelled = true;
         };
-    }, [internalUser, enrolledCourseIds]);
+    }, [internalUser, enrolledCourseIds, idsKey]);
 
     const sortedCourses = useMemo(() => {
         return [...courses].sort((a, b) => (a.title ?? "").localeCompare(b.title ?? ""));

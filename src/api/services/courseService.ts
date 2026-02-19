@@ -6,22 +6,16 @@
 import api from "@/api/axios";
 import {API_ENDPOINTS} from "@/api/endpoints";
 import {Course, CourseListItem, CreateCoursePayload, UpdateCoursePayload} from "@/api/types/course";
+import {CourseSummaryResponse, StudentCourseResponse} from "@/api/types/student";
 import {PublicCourseListItem} from "@/api/types/public";
 
-type CourseSearchResponseItem = {
-    id: string;
-    title: string;
-    description?: string | null;
-    status?: string;
-    sections?: unknown;
-    createdAt?: string | null;
-    updatedAt?: string | null;
-};
-
-function mapSearchItemToPublicListItem(item: CourseSearchResponseItem): PublicCourseListItem {
+/**
+ * Maps CourseSummaryResponse to PublicCourseListItem for catalog grid compatibility
+ */
+function mapSummaryToListItem(summary: CourseSummaryResponse): PublicCourseListItem {
     return {
-        id: item.id,
-        title: item.title,
+        id: summary.id,
+        title: summary.title,
         author: null,
         price: null,
     };
@@ -111,14 +105,15 @@ export const courseService = {
     },
 
     /**
-     * Search courses by IDs
+     * Search courses by IDs (for student enrolled courses)
      * POST /courses/search
      *
-     * Backend returns CourseResponse[].
-     * UI wants catalog-like cards, so we normalize here.
+     * Backend returns CourseSummaryResponse[] (lightweight DTO without sections/chapters).
+     * This endpoint is used for student dashboard grid only.
+     * Maps results to PublicCourseListItem for catalog grid compatibility.
      *
      * @param ids Array of course IDs to search for
-     * @returns List of courses matching the provided IDs (normalized for catalog cards)
+     * @returns List of course summaries matching the provided IDs
      * @throws {ApiError} If request fails or user unauthorized
      */
     async searchCoursesByIds(ids: string[]): Promise<PublicCourseListItem[]> {
@@ -126,13 +121,13 @@ export const courseService = {
             return [];
         }
 
-        const res = await api.post<CourseSearchResponseItem[]>(
+        const res = await api.post<CourseSummaryResponse[]>(
             API_ENDPOINTS.COURSE_SEARCH.BY_IDS,
             {ids}
         );
 
         const data = Array.isArray(res.data) ? res.data : [];
-        return data.map(mapSearchItemToPublicListItem);
+        return data.map(mapSummaryToListItem);
     },
 
     /**
@@ -148,8 +143,8 @@ export const courseService = {
      * @returns Full course with sections, chapters, and video metadata
      * @throws {ApiError} If not enrolled, course not found, or not published
      */
-    async getEnrolledCourseById(courseId: string): Promise<Course> {
-        const res = await api.get<Course>(API_ENDPOINTS.STUDENT.COURSE_BY_ID(courseId));
+    async getStudentCourseById(courseId: string): Promise<StudentCourseResponse> {
+        const res = await api.get<StudentCourseResponse>(API_ENDPOINTS.STUDENT.COURSE_BY_ID(courseId));
         return res.data;
     },
 };

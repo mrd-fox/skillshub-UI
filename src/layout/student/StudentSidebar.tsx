@@ -1,6 +1,7 @@
 // src/layouts/student/StudentSidebar.tsx
 import {NavLink, useLocation} from "react-router-dom";
 import {BookOpen, Heart, LayoutDashboard, LogOut, Settings, User,} from "lucide-react";
+import {useTranslation} from "react-i18next";
 import {Button} from "@/components/ui/button";
 import {Avatar, AvatarFallback} from "@/components/ui/avatar";
 import {motion} from "framer-motion";
@@ -11,6 +12,7 @@ import {useAuth} from "@/context/AuthContext";
  * Animated sidebar with avatar, menu, and logout.
  */
 export default function StudentSidebar() {
+    const {t} = useTranslation();
 
     const {
         internalUser,
@@ -25,11 +27,11 @@ export default function StudentSidebar() {
             : "ST";
 
     const navItems = [
-        {to: "/dashboard/student", label: "Dashboard", icon: LayoutDashboard},
-        {to: "/dashboard/student/courses", label: "My Courses", icon: BookOpen},
-        {to: "/dashboard/student/wishlist", label: "Wishlist", icon: Heart},
-        {to: "/dashboard/student/profile", label: "Profile", icon: User},
-        {to: "/dashboard/student/settings", label: "Settings", icon: Settings},
+        {to: "/dashboard/student", label: t("navigation.dashboard"), icon: LayoutDashboard},
+        {to: "/dashboard/student/courses", label: t("navigation.my_courses"), icon: BookOpen},
+        {to: "/dashboard/student/wishlist", label: t("student.wishlist"), icon: Heart},
+        {to: "/dashboard/student/profile", label: t("navigation.profile"), icon: User},
+        {to: "/dashboard/student/settings", label: t("navigation.settings"), icon: Settings},
     ];
 
     return (
@@ -42,10 +44,10 @@ export default function StudentSidebar() {
                 </Avatar>
                 <div className="flex flex-col">
                     <span className="text-sm font-semibold text-gray-800">
-                        {internalUser?.email ?? "Student"}
+                        {internalUser?.email ?? t("student.default_name")}
                     </span>
                     <span className="text-xs text-gray-500">
-                        Learner
+                        {t("student.role_label")}
                     </span>
                 </div>
             </div>
@@ -87,7 +89,7 @@ export default function StudentSidebar() {
                     onClick={() => logout()}
                 >
                     <LogOut className="w-4 h-4"/>
-                    Logout
+                    {t("auth.logout")}
                 </Button>
             </div>
 

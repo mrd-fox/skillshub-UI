@@ -1,6 +1,7 @@
 // src/layouts/tutor/TutorSidebar.tsx
 import {NavLink, useLocation} from "react-router-dom";
 import {BookOpen, LayoutDashboard, LogOut, PlusCircle, Settings, Users,} from "lucide-react";
+import {useTranslation} from "react-i18next";
 import {useAuth} from "@/context/AuthContext";
 import {Button} from "@/components/ui/button";
 import {motion} from "framer-motion";
@@ -11,6 +12,7 @@ import {Avatar, AvatarFallback} from "@/components/ui/avatar.tsx";
  * Uses shadcn/ui components and lucide-react icons.
  */
 export default function TutorSidebar() {
+    const {t} = useTranslation();
 
     const {
         internalUser,
@@ -27,11 +29,11 @@ export default function TutorSidebar() {
 
     // Sidebar navigation items
     const navItems = [
-        { to: "/dashboard/tutor", label: "Dashboard", icon: LayoutDashboard, end: true },
-        { to: "/dashboard/tutor/courses", label: "My Courses", icon: BookOpen, end: false }, // ✅ important
-        { to: "/dashboard/tutor/create", label: "Create Course", icon: PlusCircle, end: true },
-        { to: "/dashboard/tutor/students", label: "My Students", icon: Users, end: true },
-        { to: "/dashboard/tutor/settings", label: "Settings", icon: Settings, end: true },    ];
+        {to: "/dashboard/tutor", label: t("navigation.dashboard"), icon: LayoutDashboard, end: true},
+        {to: "/dashboard/tutor/courses", label: t("navigation.my_courses"), icon: BookOpen, end: false}, // ✅ important
+        {to: "/dashboard/tutor/create", label: t("dashboard.create_course"), icon: PlusCircle, end: true},
+        {to: "/dashboard/tutor/students", label: t("tutor.my_students"), icon: Users, end: true},
+        {to: "/dashboard/tutor/settings", label: t("navigation.settings"), icon: Settings, end: true},];
 
     // Special rule:
     const isActiveRoute = (path: string) => {
@@ -54,9 +56,9 @@ export default function TutorSidebar() {
                 </Avatar>
                 <div className="flex flex-col">
                     <span className="text-sm font-semibold text-gray-800">
-                        {internalUser?.email ?? "Tutor"}
+                        {internalUser?.email ?? t("tutor.default_name")}
                     </span>
-                    <span className="text-xs text-gray-500">Instructor</span>
+                    <span className="text-xs text-gray-500">{t("tutor.role_label")}</span>
                 </div>
             </div>
 
@@ -97,7 +99,7 @@ export default function TutorSidebar() {
                     onClick={() => logout()}
                 >
                     <LogOut className="w-4 h-4"/>
-                    Logout
+                    {t("auth.logout")}
                 </Button>
             </div>
 

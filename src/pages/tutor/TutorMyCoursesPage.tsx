@@ -1,5 +1,6 @@
 import {useEffect, useMemo, useState} from "react";
 import {useNavigate} from "react-router-dom";
+import {useTranslation} from "react-i18next";
 import api from "@/api/axios";
 
 // shadcn/ui
@@ -24,6 +25,7 @@ type ApiError = {
 };
 
 export default function TutorMyCoursesPage() {
+    const {t} = useTranslation();
     const navigate = useNavigate();
 
     const [loading, setLoading] = useState<boolean>(true);
@@ -50,7 +52,7 @@ export default function TutorMyCoursesPage() {
 
                 // Message is already sanitized by axios interceptor (never show backend logs/messages)
                 if (!cancelled) {
-                    setError(typeof err?.message === "string" && err.message.length > 0 ? err.message : "Une erreur est survenue. Réessayez.");
+                    setError(typeof err?.message === "string" && err.message.length > 0 ? err.message : t("api.errors.generic_retry"));
                     setCourses([]);
                 }
             } finally {
@@ -65,7 +67,7 @@ export default function TutorMyCoursesPage() {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [t]);
 
     const skeletonItems = useMemo(() => {
         return new Array(6).fill(null).map((_, idx) => {
@@ -96,9 +98,9 @@ export default function TutorMyCoursesPage() {
         <div className="w-full p-4 md:p-6">
             <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
-                    <h1 className="text-xl font-semibold">My Courses</h1>
+                    <h1 className="text-xl font-semibold">{t("navigation.my_courses")}</h1>
                     <p className="text-sm text-muted-foreground">
-                        Click a course to open the editor. Covers are intentionally hidden (skeleton).
+                        {t("tutor.courses_page_description")}
                     </p>
                 </div>
 
@@ -107,14 +109,14 @@ export default function TutorMyCoursesPage() {
                         navigate("/dashboard/tutor/create");
                     }}
                 >
-                    Create Course
+                    {t("dashboard.create_course")}
                 </Button>
             </div>
 
             {error !== null ? (
                 <Card className="border-destructive/40">
                     <CardHeader>
-                        <div className="text-sm font-medium text-destructive">Loading failed</div>
+                        <div className="text-sm font-medium text-destructive">{t("tutor.loading_failed")}</div>
                     </CardHeader>
                     <CardContent>
                         <div className="text-sm text-muted-foreground break-words">{error}</div>
@@ -125,7 +127,7 @@ export default function TutorMyCoursesPage() {
                                     window.location.reload();
                                 }}
                             >
-                                Retry
+                                {t("common.retry")}
                             </Button>
                         </div>
                     </CardContent>
@@ -135,9 +137,9 @@ export default function TutorMyCoursesPage() {
             {!loading && error === null && courses.length === 0 ? (
                 <Card className="mt-4">
                     <CardContent className="py-8">
-                        <div className="text-sm font-medium">No courses yet</div>
+                        <div className="text-sm font-medium">{t("tutor.no_courses_yet")}</div>
                         <div className="mt-1 text-sm text-muted-foreground">
-                            Create your first course to start building your content.
+                            {t("tutor.no_courses_description")}
                         </div>
                         <div className="mt-4">
                             <Button
@@ -145,7 +147,7 @@ export default function TutorMyCoursesPage() {
                                     navigate("/dashboard/tutor/create");
                                 }}
                             >
-                                Create Course
+                                {t("dashboard.create_course")}
                             </Button>
                         </div>
                     </CardContent>
@@ -181,11 +183,12 @@ function CourseCard(props: {
     disabled: boolean;
     onOpen: () => void;
 }) {
+    const {t} = useTranslation();
     const statusVariant = getStatusVariant(props.course.status);
-    const statusLabel = getStatusLabel(props.course.status);
+    const statusLabel = getStatusLabel(props.course.status, t);
 
-    const title = props.course.title ?? "Untitled course";
-    const updatedLabel = formatUpdatedAt(props.course.updatedAt);
+    const title = props.course.title ?? t("tutor.untitled_course");
+    const updatedLabel = formatUpdatedAt(props.course.updatedAt, t);
 
     return (
         <Card
@@ -249,24 +252,24 @@ function CourseCard(props: {
 
                 <div className="pt-1">
                     {props.disabled ? <Skeleton className="h-3 w-28"/> :
-                        <span className="text-xs text-muted-foreground">Open editor →</span>}
+                        <span className="text-xs text-muted-foreground">{t("tutor.open_editor")}</span>}
                 </div>
             </CardContent>
         </Card>
     );
 }
 
-function getStatusLabel(status: CourseStatus): string {
+function getStatusLabel(status: CourseStatus, t: (key: string) => string): string {
     if (status === "DRAFT") {
-        return "Draft";
+        return t("course_status.draft");
     } else if (status === "PUBLISHED") {
-        return "Published";
+        return t("course_status.published");
     } else if (status === "ARCHIVED") {
-        return "Archived";
+        return t("course_status.archived");
     } else if (status === "PROCESSING") {
-        return "Processing";
+        return t("course_status.processing");
     } else if (status === "READY") {
-        return "Ready";
+        return t("course_status.ready");
     } else {
         return status;
     }
@@ -288,15 +291,15 @@ function getStatusVariant(status: CourseStatus): "default" | "secondary" | "dest
     }
 }
 
-function formatUpdatedAt(updatedAt?: string): string {
+function formatUpdatedAt(updatedAt?: string, t?: (key: string) => string): string {
     if (!updatedAt) {
-        return "Updated recently";
+        return t ? t("tutor.updated_recently") : "Updated recently";
     } else {
         const date = new Date(updatedAt);
         if (Number.isNaN(date.getTime())) {
-            return "Updated recently";
+            return t ? t("tutor.updated_recently") : "Updated recently";
         } else {
-            return `Updated on ${date.toLocaleDateString()}`;
+            return t ? `${t("tutor.updated_on")} ${date.toLocaleDateString()}` : `Updated on ${date.toLocaleDateString()}`;
         }
     }
 }

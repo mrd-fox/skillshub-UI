@@ -73,6 +73,7 @@
     "description": "Browse available courses. Sign in is only required to purchase, follow, and publish."
   },
   "student": {
+    "dashboard_title": "Student Dashboard",
     "catalog_title": "Course Catalog",
     "catalog_description": "Browse available courses and add them to your list to access them.",
     "course_access_denied": "You do not have access to this course.",
@@ -82,7 +83,25 @@
     "select_chapter": "Select a chapter",
     "no_video_available": "No video available for this chapter.",
     "select_chapter_to_start": "Select a chapter to start.",
-    "course_content": "Course Content"
+    "course_content": "Course Content",
+    "wishlist": "Wishlist",
+    "default_name": "Student",
+    "role_label": "Learner"
+  },
+  "tutor": {
+    "dashboard_title": "Tutor Dashboard",
+    "learn_button": "Learn on Skillhub",
+    "my_students": "My Students",
+    "default_name": "Tutor",
+    "role_label": "Instructor",
+    "courses_page_description": "Click a course to open the editor. Covers are intentionally hidden (skeleton).",
+    "loading_failed": "Loading failed",
+    "no_courses_yet": "No courses yet",
+    "no_courses_description": "Create your first course to start building your content.",
+    "untitled_course": "Untitled course",
+    "open_editor": "Open editor →",
+    "updated_recently": "Updated recently",
+    "updated_on": "Updated on"
   },
   "dashboard": {
     "welcome": "Welcome to the platform",

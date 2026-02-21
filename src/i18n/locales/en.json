@@ -26,7 +26,8 @@
   },
   "errors": {
     "course_not_found": "Course not found.",
-    "catalog_unauthorized": "Catalog unavailable (access denied)."
+    "catalog_unauthorized": "Catalog unavailable (access denied).",
+    "unauthorized_page_message": "You do not have the necessary permissions to view this page."
   },
   "enrollment": {
     "success": "Course added to your list.",
@@ -59,7 +60,13 @@
     "search": "Search...",
     "teach": "Teach on Skillhub",
     "account": "My Account",
-    "profile": "My Profile"
+    "profile": "My Profile",
+    "errors": {
+      "profile_load_failed": "Unable to load your profile. Please try again.",
+      "profile_unavailable": "Internal profile unavailable. Action not possible.",
+      "invalid_roles": "Invalid roles. Please contact support.",
+      "promotion_failed": "Promotion failed. Please try again."
+    }
   },
   "dashboard": {
     "welcome": "Welcome to the platform",

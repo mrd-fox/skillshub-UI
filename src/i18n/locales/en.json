@@ -1,4 +1,56 @@
 {
+  "common": {
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "close": "Close",
+    "loading": "Loading...",
+    "processing": "Processing...",
+    "retry": "Retry",
+    "reset": "Reset",
+    "upload": "Upload",
+    "status": "Status",
+    "free": "Free",
+    "no_chapters": "No chapters",
+    "no_content": "No content",
+    "untitled": "Untitled"
+  },
+  "api": {
+    "errors": {
+      "session_expired": "Your session has expired. Please log in again.",
+      "access_denied": "Access denied.",
+      "service_unavailable": "Service unavailable. Please try again later.",
+      "generic": "An error occurred.",
+      "generic_retry": "An error occurred. Please try again."
+    }
+  },
+  "errors": {
+    "course_not_found": "Course not found.",
+    "catalog_unauthorized": "Catalog unavailable (access denied)."
+  },
+  "enrollment": {
+    "success": "Course added to your list.",
+    "already_enrolled": "You are already enrolled in this course."
+  },
+  "navigation": {
+    "dashboard": "Dashboard",
+    "my_courses": "My Courses",
+    "settings": "Settings",
+    "profile": "My Profile",
+    "back_home": "Back to home",
+    "back_to_courses": "Back to my courses",
+    "teach_button": "Teach on Skillhub"
+  },
+  "course_status": {
+    "draft": "Draft",
+    "published": "Published",
+    "archived": "Archived",
+    "processing": "Processing",
+    "ready": "Ready",
+    "pending": "Pending",
+    "failed": "Failed",
+    "waiting_validation": "Waiting for validation"
+  },
   "auth": {
     "login": "Log in",
     "logout": "Log out"

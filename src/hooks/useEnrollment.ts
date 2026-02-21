@@ -4,6 +4,7 @@
  */
 
 import {useCallback, useState} from "react";
+import {useTranslation} from "react-i18next";
 import {toast} from "sonner";
 import {userService} from "@/api/services/userService";
 import {useAuth} from "@/context/AuthContext";
@@ -16,6 +17,7 @@ interface UseEnrollmentReturn {
 }
 
 export function useEnrollment(): UseEnrollmentReturn {
+    const {t} = useTranslation();
     const {setInternalUser} = useAuth();
     const [isEnrolling, setIsEnrolling] = useState(false);
     const [enrollingCourseId, setEnrollingCourseId] = useState<string | null>(null);
@@ -35,18 +37,18 @@ export function useEnrollment(): UseEnrollmentReturn {
                 const updatedUser = await userService.getMyProfile();
                 setInternalUser(updatedUser);
 
-                toast.success("Cours ajouté à votre liste.");
+                toast.success(t("enrollment.success"));
             } catch (error) {
                 const err = error as ApiError;
 
                 if (err.status === 409) {
-                    toast.info("Vous êtes déjà inscrit à ce cours.");
+                    toast.info(t("enrollment.already_enrolled"));
                 } else if (err.status === 404) {
-                    toast.error("Cours introuvable.");
+                    toast.error(t("errors.course_not_found"));
                 } else if (err.status >= 500) {
-                    toast.error("Service indisponible. Réessayez plus tard.");
+                    toast.error(t("api.errors.service_unavailable"));
                 } else {
-                    toast.error("Une erreur est survenue. Réessayez plus tard.");
+                    toast.error(t("api.errors.generic_retry"));
                 }
 
                 try {
@@ -62,7 +64,7 @@ export function useEnrollment(): UseEnrollmentReturn {
                 setEnrollingCourseId(null);
             }
         },
-        [enrollingCourseId, setInternalUser]
+        [enrollingCourseId, setInternalUser, t]
     );
 
     return {

@@ -1,4 +1,56 @@
 {
+  "common": {
+    "cancel": "Annuler",
+    "confirm": "Confirmer",
+    "delete": "Supprimer",
+    "close": "Fermer",
+    "loading": "Chargement...",
+    "processing": "Traitement en cours...",
+    "retry": "Réessayer",
+    "reset": "Réinitialiser",
+    "upload": "Téléverser",
+    "status": "Statut",
+    "free": "Gratuit",
+    "no_chapters": "Aucun chapitre",
+    "no_content": "Aucun contenu",
+    "untitled": "Sans titre"
+  },
+  "api": {
+    "errors": {
+      "session_expired": "Votre session a expiré. Veuillez vous reconnecter.",
+      "access_denied": "Accès refusé.",
+      "service_unavailable": "Service indisponible. Réessayez plus tard.",
+      "generic": "Une erreur est survenue.",
+      "generic_retry": "Une erreur est survenue. Réessayez."
+    }
+  },
+  "errors": {
+    "course_not_found": "Cours introuvable.",
+    "catalog_unauthorized": "Catalogue indisponible (accès non autorisé)."
+  },
+  "enrollment": {
+    "success": "Cours ajouté à votre liste.",
+    "already_enrolled": "Vous êtes déjà inscrit à ce cours."
+  },
+  "navigation": {
+    "dashboard": "Tableau de bord",
+    "my_courses": "Mes cours",
+    "settings": "Paramètres",
+    "profile": "Mon profil",
+    "back_home": "Retour à l'accueil",
+    "back_to_courses": "Retour à mes cours",
+    "teach_button": "Enseigner sur Skillhub"
+  },
+  "course_status": {
+    "draft": "Brouillon",
+    "published": "Publié",
+    "archived": "Archivé",
+    "processing": "En traitement",
+    "ready": "Prêt",
+    "pending": "En attente",
+    "failed": "Échoué",
+    "waiting_validation": "En attente de validation"
+  },
   "auth": {
     "login": "Se connecter",
     "logout": "Se déconnecter"

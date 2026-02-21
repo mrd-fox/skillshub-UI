@@ -3,6 +3,21 @@ import axios from 'axios';
 import {toast} from 'sonner';
 import type {ApiError} from './axios';
 
+// Mock i18n
+vi.mock('@/i18n', () => ({
+    default: {
+        t: (key: string) => {
+            const translations: Record<string, string> = {
+                'api.errors.session_expired': 'Votre session a expiré. Veuillez vous reconnecter.',
+                'api.errors.access_denied': 'Accès refusé.',
+                'api.errors.service_unavailable': 'Service indisponible. Réessayez plus tard.',
+                'api.errors.generic_retry': 'Une erreur est survenue. Réessayez.',
+            };
+            return translations[key] || key;
+        },
+    },
+}));
+
 // Mock sonner toast
 vi.mock('sonner', () => ({
     toast: {

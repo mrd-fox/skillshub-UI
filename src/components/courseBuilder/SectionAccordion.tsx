@@ -2,12 +2,14 @@ import {Accordion, AccordionItem} from "@/components/ui/accordion.tsx";
 import {Button} from "@/components/ui/button.tsx";
 import {Plus, Trash2} from "lucide-react";
 import {useEffect, useState} from "react";
+import {useTranslation} from "react-i18next";
 import {Input} from "@/components/ui/input.tsx";
 
 type Chapter = { id: number; title: string; position: number };
 type Section = { id: number; title: string; position: number; chapters: Chapter[] };
 
 export function SectionAccordion({onChange}: { onChange: (sections: Section[]) => void }) {
+    const {t} = useTranslation();
     const [sections, setSections] = useState<Section[]>([]);
 
     // 🔁 sync vers le parent
@@ -91,7 +93,7 @@ export function SectionAccordion({onChange}: { onChange: (sections: Section[]) =
                         {/* En-tête section */}
                         <div className="flex items-center justify-between mb-3">
                             <h3 className="text-lg font-semibold text-gray-800">
-                                Section {i + 1}
+                                {t("tutor.section_number", {number: i + 1})}
                             </h3>
                             <Button
                                 variant="ghost"
@@ -105,7 +107,7 @@ export function SectionAccordion({onChange}: { onChange: (sections: Section[]) =
 
                         {/* Champ titre de section */}
                         <Input
-                            placeholder={`Titre de la section ${i + 1}`}
+                            placeholder={t("tutor.section_title_placeholder", {number: i + 1})}
                             value={section.title}
                             onChange={(e) => updateSectionTitle(section.id, e.target.value)}
                             className="mb-4"
@@ -119,10 +121,10 @@ export function SectionAccordion({onChange}: { onChange: (sections: Section[]) =
                                     className="flex items-center gap-3 bg-gray-50 border rounded-lg p-3"
                                 >
                                     <span className="text-sm font-medium text-gray-700 w-24">
-                                        Chapitre {j + 1}
+                                        {t("tutor.chapter_number", {number: j + 1})}
                                     </span>
                                     <Input
-                                        placeholder={`Titre du chapitre ${j + 1}`}
+                                        placeholder={t("tutor.chapter_title_placeholder", {number: j + 1})}
                                         value={ch.title}
                                         onChange={(e) =>
                                             updateChapterTitle(section.id, ch.id, e.target.value)
@@ -146,7 +148,7 @@ export function SectionAccordion({onChange}: { onChange: (sections: Section[]) =
                             onClick={() => addChapter(section.id)}
                             className="mt-4 !bg-[#E6EDFF] !text-[#2A6AEE] hover:!bg-[#d6e3ff]"
                         >
-                            <Plus className="w-4 h-4 mr-2"/> Ajouter un chapitre
+                            <Plus className="w-4 h-4 mr-2"/> {t("tutor.add_chapter")}
                         </Button>
                     </AccordionItem>
                 ))}
@@ -157,7 +159,7 @@ export function SectionAccordion({onChange}: { onChange: (sections: Section[]) =
                 onClick={addSection}
                 className="!bg-[#2A6AEE] text-white hover:!bg-[#1f57ca]"
             >
-                <Plus className="w-4 h-4 mr-2"/> Ajouter une section
+                <Plus className="w-4 h-4 mr-2"/> {t("tutor.add_section")}
             </Button>
         </div>
     );

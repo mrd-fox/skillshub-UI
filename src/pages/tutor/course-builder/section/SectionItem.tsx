@@ -1,4 +1,5 @@
 import {ReactNode, useEffect, useRef, useState} from "react";
+import {useTranslation} from "react-i18next";
 import {AccordionContent, AccordionItem, AccordionTrigger} from "@/components/ui/accordion.tsx";
 import {MoveButton} from "@/components/MoveButton.tsx";
 import {ArrowDown, ArrowUp, Pencil, Trash2} from "lucide-react";
@@ -39,6 +40,7 @@ export default function SectionItem({
                                         onAddChapter,
                                         children,
                                     }: Readonly<Props>) {
+    const {t} = useTranslation();
     const [isEditing, setIsEditing] = useState<boolean>(false);
     const [draftTitle, setDraftTitle] = useState<string>(section.title ?? "");
     const inputRef = useRef<HTMLInputElement | null>(null);
@@ -96,6 +98,11 @@ export default function SectionItem({
     }
 
     const chaptersCount = section.chapters?.length ?? 0;
+    const chaptersLabel = chaptersCount === 0
+        ? t("common.no_chapters")
+        : chaptersCount === 1
+            ? `1 ${t("tutor.chapter_singular")}`
+            : `${chaptersCount} ${t("tutor.chapter_plural")}`;
 
     return (
         <AccordionItem
@@ -110,7 +117,7 @@ export default function SectionItem({
                         size="icon"
                         className="h-7 w-7"
                         disabled={actionsLocked}
-                        aria-label="Rename section"
+                        aria-label={t("tutor.rename_section")}
                         onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -127,7 +134,7 @@ export default function SectionItem({
                         data-cy="delete-section"
                         className="h-7 w-7 text-destructive hover:text-destructive"
                         disabled={readOnly}
-                        aria-label="Delete section"
+                        aria-label={t("tutor.delete_section")}
                         onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -138,7 +145,7 @@ export default function SectionItem({
                     </Button>
 
                     <MoveButton
-                        label="Monter la section"
+                        label={t("tutor.move_section_up")}
                         disabled={readOnly || !canMoveUp || isEditing}
                         onClick={(e) => {
                             e.preventDefault();
@@ -149,7 +156,7 @@ export default function SectionItem({
                     />
 
                     <MoveButton
-                        label="Descendre la section"
+                        label={t("tutor.move_section_down")}
                         disabled={readOnly || !canMoveDown || isEditing}
                         onClick={(e) => {
                             e.preventDefault();
@@ -178,16 +185,16 @@ export default function SectionItem({
                                 }}
                                 onBlur={commitRename}
                                 className="h-9 bg-background"
-                                aria-label="Rename section"
+                                aria-label={t("tutor.rename_section")}
                                 disabled={readOnly}
                             />
                         ) : (
                             <>
                                 <div className="truncate font-semibold">
-                                    {index + 1}. {section.title || "Section sans titre"}
+                                    {index + 1}. {section.title || t("tutor.untitled_section")}
                                 </div>
                                 <div className="text-xs text-muted-foreground">
-                                    {chaptersCount} chapitre{chaptersCount > 1 ? "s" : ""}
+                                    {chaptersLabel}
                                 </div>
                             </>
                         )}
@@ -207,7 +214,7 @@ export default function SectionItem({
                         disabled={readOnly}
                         onClick={() => onAddChapter(section.id)}
                     >
-                        + Ajouter un chapitre
+                        + {t("tutor.add_chapter")}
                     </Button>
                 </div>
             </AccordionContent>

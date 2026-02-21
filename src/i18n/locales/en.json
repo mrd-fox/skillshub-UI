@@ -74,7 +74,15 @@
   },
   "student": {
     "catalog_title": "Course Catalog",
-    "catalog_description": "Browse available courses and add them to your list to access them."
+    "catalog_description": "Browse available courses and add them to your list to access them.",
+    "course_access_denied": "You do not have access to this course.",
+    "course_load_failed": "Unable to load course.",
+    "course_id_missing": "Course ID missing.",
+    "enrollment_required": "You must be enrolled in this course to access the content.",
+    "select_chapter": "Select a chapter",
+    "no_video_available": "No video available for this chapter.",
+    "select_chapter_to_start": "Select a chapter to start.",
+    "course_content": "Course Content"
   },
   "dashboard": {
     "welcome": "Welcome to the platform",

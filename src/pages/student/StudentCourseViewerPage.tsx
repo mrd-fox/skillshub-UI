@@ -6,6 +6,7 @@
 
 import {useEffect, useMemo, useState} from "react";
 import {useNavigate, useParams} from "react-router-dom";
+import {useTranslation} from "react-i18next";
 import {ArrowLeft, ChevronRight, PlayCircle} from "lucide-react";
 import {useAuth} from "@/context/AuthContext";
 import {courseService} from "@/api/services/courseService";
@@ -25,23 +26,24 @@ function isApiError(e: unknown): e is ApiError {
     return typeof candidate.status === "number" && typeof candidate.message === "string";
 }
 
-function errorMessage(e: unknown): string {
+function errorMessage(e: unknown, t: (key: string) => string): string {
     if (isApiError(e)) {
         if (e.status === 403) {
-            return "Vous n'avez pas accès à ce cours.";
+            return t("student.course_access_denied");
         }
         if (e.status === 404) {
-            return "Cours introuvable.";
+            return t("errors.course_not_found");
         }
         return e.message;
     }
     if (e instanceof Error && e.message.trim().length > 0) {
         return e.message;
     }
-    return "Impossible de charger le cours.";
+    return t("student.course_load_failed");
 }
 
 export default function StudentCourseViewerPage() {
+    const {t} = useTranslation();
     const {courseId} = useParams<{ courseId: string }>();
     const navigate = useNavigate();
     const {internalUser} = useAuth();
@@ -58,7 +60,7 @@ export default function StudentCourseViewerPage() {
 
         async function load(): Promise<void> {
             if (!courseId) {
-                setError("ID de cours manquant.");
+                setError(t("student.course_id_missing"));
                 setLoading(false);
                 return;
             }
@@ -85,7 +87,7 @@ export default function StudentCourseViewerPage() {
                 }
             } catch (e: unknown) {
                 if (!cancelled) {
-                    setError(errorMessage(e));
+                    setError(errorMessage(e, t));
                     setCourse(null);
                 }
             } finally {
@@ -100,7 +102,7 @@ export default function StudentCourseViewerPage() {
         return () => {
             cancelled = true;
         };
-    }, [courseId]);
+    }, [courseId, t]);
 
     const isEnrolled = useMemo(() => {
         if (!internalUser || !courseId) {
@@ -186,7 +188,7 @@ export default function StudentCourseViewerPage() {
                         className="mb-4"
                     >
                         <ArrowLeft className="mr-2 h-4 w-4" aria-hidden="true"/>
-                        Retour à mes cours
+                        {t("navigation.back_to_courses")}
                     </Button>
                 </header>
 
@@ -204,7 +206,7 @@ export default function StudentCourseViewerPage() {
         return (
             <main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6">
                 <section className="rounded-lg border bg-muted/10 p-4 text-sm text-muted-foreground">
-                    Aucun cours à afficher.
+                    {t("common.no_content")}
                 </section>
             </main>
         );
@@ -222,14 +224,14 @@ export default function StudentCourseViewerPage() {
                         className="mb-4"
                     >
                         <ArrowLeft className="mr-2 h-4 w-4" aria-hidden="true"/>
-                        Retour à mes cours
+                        {t("navigation.back_to_courses")}
                     </Button>
                 </header>
 
                 <section
                     className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-700"
                 >
-                    Vous devez être inscrit à ce cours pour accéder au contenu.
+                    {t("student.enrollment_required")}
                 </section>
             </main>
         );
@@ -245,7 +247,7 @@ export default function StudentCourseViewerPage() {
                     onClick={handleGoBack}
                 >
                     <ArrowLeft className="mr-2 h-4 w-4" aria-hidden="true"/>
-                    Retour à mes cours
+                    {t("navigation.back_to_courses")}
                 </Button>
 
                 <div>
@@ -263,7 +265,7 @@ export default function StudentCourseViewerPage() {
                     <Card>
                         <CardHeader>
                             <CardTitle>
-                                {selectedChapter?.title ?? "Sélectionnez un chapitre"}
+                                {selectedChapter?.title ?? t("student.select_chapter")}
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">
@@ -290,7 +292,7 @@ export default function StudentCourseViewerPage() {
                                                     className="mx-auto mb-2 h-12 w-12"
                                                     aria-hidden="true"
                                                 />
-                                                <p>Aucune vidéo disponible pour ce chapitre.</p>
+                                                <p>{t("student.no_video_available")}</p>
                                             </div>
                                         </div>
                                     )}
@@ -299,7 +301,7 @@ export default function StudentCourseViewerPage() {
                                 <div
                                     className="flex aspect-video w-full items-center justify-center rounded-lg border bg-muted/10">
                                     <p className="text-sm text-muted-foreground">
-                                        Sélectionnez un chapitre pour commencer.
+                                        {t("student.select_chapter_to_start")}
                                     </p>
                                 </div>
                             )}
@@ -310,12 +312,12 @@ export default function StudentCourseViewerPage() {
                 <aside>
                     <Card>
                         <CardHeader>
-                            <CardTitle className="text-base">Contenu du cours</CardTitle>
+                            <CardTitle className="text-base">{t("student.course_content")}</CardTitle>
                         </CardHeader>
                         <CardContent>
                             {course.sections.length === 0 ? (
                                 <p className="text-sm text-muted-foreground">
-                                    Aucun contenu disponible.
+                                    {t("common.no_content")}
                                 </p>
                             ) : (
                                 <nav className="space-y-4" aria-label="Sections et chapitres">
@@ -331,7 +333,7 @@ export default function StudentCourseViewerPage() {
 
                                                 {section.chapters.length === 0 ? (
                                                     <p className="text-xs text-muted-foreground">
-                                                        Aucun chapitre.
+                                                        {t("common.no_chapters")}
                                                     </p>
                                                 ) : (
                                                     <ul className="space-y-1">

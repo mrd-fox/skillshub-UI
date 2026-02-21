@@ -74,7 +74,15 @@
   },
   "student": {
     "catalog_title": "Catalogue des cours",
-    "catalog_description": "Parcourez les cours disponibles et ajoutez-les à votre liste pour y accéder."
+    "catalog_description": "Parcourez les cours disponibles et ajoutez-les à votre liste pour y accéder.",
+    "course_access_denied": "Vous n'avez pas accès à ce cours.",
+    "course_load_failed": "Impossible de charger le cours.",
+    "course_id_missing": "ID de cours manquant.",
+    "enrollment_required": "Vous devez être inscrit à ce cours pour accéder au contenu.",
+    "select_chapter": "Sélectionnez un chapitre",
+    "no_video_available": "Aucune vidéo disponible pour ce chapitre.",
+    "select_chapter_to_start": "Sélectionnez un chapitre pour commencer.",
+    "course_content": "Contenu du cours"
   },
   "dashboard": {
     "welcome": "Bienvenue sur la plateforme",

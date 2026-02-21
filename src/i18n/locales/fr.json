@@ -27,6 +27,7 @@
   "errors": {
     "course_not_found": "Cours introuvable.",
     "catalog_unauthorized": "Catalogue indisponible (accès non autorisé).",
+    "catalog_load_failed": "Impossible de charger le catalogue.",
     "unauthorized_page_message": "Vous n'avez pas les permissions nécessaires pour consulter cette page."
   },
   "enrollment": {
@@ -67,6 +68,9 @@
       "invalid_roles": "Rôles invalides. Contactez le support.",
       "promotion_failed": "Échec de la promotion. Réessayez."
     }
+  },
+  "home": {
+    "description": "Parcours les cours disponibles. La connexion est requise uniquement pour acheter, suivre et publier."
   },
   "dashboard": {
     "welcome": "Bienvenue sur la plateforme",

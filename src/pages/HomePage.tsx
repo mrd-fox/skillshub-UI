@@ -1,4 +1,5 @@
 import {useEffect, useMemo, useRef, useState} from "react";
+import {useTranslation} from "react-i18next";
 import api, {ApiError} from "@/api/axios";
 import {API_ENDPOINTS} from "@/api/endpoints";
 import {CourseCatalogGrid} from "@/components/catalog/CourseCatalogGrid";
@@ -13,11 +14,11 @@ function isApiError(e: unknown): e is ApiError {
     return typeof candidate.status === "number" && typeof candidate.message === "string";
 }
 
-function publicCatalogErrorMessage(e: unknown): string {
+function publicCatalogErrorMessage(e: unknown, t: (key: string) => string): string {
     // Public page: never present auth/session semantics to the user
     if (isApiError(e)) {
         if (e.status === 401 || e.status === 403) {
-            return "Catalogue indisponible (accès non autorisé).";
+            return t("errors.catalog_unauthorized");
         }
         return e.message;
     }
@@ -26,10 +27,11 @@ function publicCatalogErrorMessage(e: unknown): string {
         return e.message;
     }
 
-    return "Impossible de charger le catalogue.";
+    return t("errors.catalog_load_failed");
 }
 
 export default function HomePage() {
+    const {t} = useTranslation();
     const [loading, setLoading] = useState<boolean>(true);
     const [courses, setCourses] = useState<PublicCourseListItem[]>([]);
     const [error, setError] = useState<string | null>(null);
@@ -60,7 +62,7 @@ export default function HomePage() {
                 if (abort.signal.aborted) {
                     return;
                 }
-                setError(publicCatalogErrorMessage(e));
+                setError(publicCatalogErrorMessage(e, t));
                 setCourses([]);
             } finally {
                 if (!abort.signal.aborted) {
@@ -74,7 +76,7 @@ export default function HomePage() {
         return () => {
             abort.abort();
         };
-    }, []);
+    }, [t]);
 
     const sortedCourses = useMemo(() => {
         return [...courses].sort((a, b) => (a.title ?? "").localeCompare(b.title ?? ""));
@@ -105,7 +107,7 @@ export default function HomePage() {
             if (abort.signal.aborted) {
                 return;
             }
-            setDetailError(publicCatalogErrorMessage(e));
+            setDetailError(publicCatalogErrorMessage(e, t));
         } finally {
             if (!abort.signal.aborted) {
                 setDetailLoading(false);
@@ -133,7 +135,7 @@ export default function HomePage() {
             <header className="space-y-1">
                 <h1 className="text-3xl font-bold">Skillshub</h1>
                 <p className="text-sm text-muted-foreground">
-                    Parcours les cours disponibles. La connexion est requise uniquement pour acheter, suivre et publier.
+                    {t("home.description")}
                 </p>
             </header>
 

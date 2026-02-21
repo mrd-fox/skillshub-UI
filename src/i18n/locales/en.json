@@ -27,6 +27,7 @@
   "errors": {
     "course_not_found": "Course not found.",
     "catalog_unauthorized": "Catalog unavailable (access denied).",
+    "catalog_load_failed": "Unable to load catalog.",
     "unauthorized_page_message": "You do not have the necessary permissions to view this page."
   },
   "enrollment": {
@@ -67,6 +68,9 @@
       "invalid_roles": "Invalid roles. Please contact support.",
       "promotion_failed": "Promotion failed. Please try again."
     }
+  },
+  "home": {
+    "description": "Browse available courses. Sign in is only required to purchase, follow, and publish."
   },
   "dashboard": {
     "welcome": "Welcome to the platform",

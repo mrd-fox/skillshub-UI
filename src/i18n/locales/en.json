@@ -72,6 +72,10 @@
   "home": {
     "description": "Browse available courses. Sign in is only required to purchase, follow, and publish."
   },
+  "student": {
+    "catalog_title": "Course Catalog",
+    "catalog_description": "Browse available courses and add them to your list to access them."
+  },
   "dashboard": {
     "welcome": "Welcome to the platform",
     "create_course": "Create a new course"

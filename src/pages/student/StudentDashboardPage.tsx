@@ -5,6 +5,7 @@
  */
 
 import {useEffect, useMemo, useRef, useState} from "react";
+import {useTranslation} from "react-i18next";
 import api, {ApiError} from "@/api/axios";
 import {API_ENDPOINTS} from "@/api/endpoints";
 import {PublicCourseDetailResponse, PublicCourseListItem} from "@/api/types/public";
@@ -20,10 +21,10 @@ function isApiError(e: unknown): e is ApiError {
     return typeof candidate.status === "number" && typeof candidate.message === "string";
 }
 
-function catalogErrorMessage(e: unknown): string {
+function catalogErrorMessage(e: unknown, t: (key: string) => string): string {
     if (isApiError(e)) {
         if (e.status === 401 || e.status === 403) {
-            return "Catalogue indisponible (accès non autorisé).";
+            return t("errors.catalog_unauthorized");
         }
         return e.message;
     }
@@ -32,10 +33,11 @@ function catalogErrorMessage(e: unknown): string {
         return e.message;
     }
 
-    return "Impossible de charger le catalogue.";
+    return t("errors.catalog_load_failed");
 }
 
 export default function StudentDashboardPage() {
+    const {t} = useTranslation();
     const [loading, setLoading] = useState<boolean>(true);
     const [courses, setCourses] = useState<PublicCourseListItem[]>([]);
     const [error, setError] = useState<string | null>(null);
@@ -66,7 +68,7 @@ export default function StudentDashboardPage() {
                 if (abort.signal.aborted) {
                     return;
                 }
-                setError(catalogErrorMessage(e));
+                setError(catalogErrorMessage(e, t));
                 setCourses([]);
             } finally {
                 if (!abort.signal.aborted) {
@@ -80,7 +82,7 @@ export default function StudentDashboardPage() {
         return () => {
             abort.abort();
         };
-    }, []);
+    }, [t]);
 
     const sortedCourses = useMemo(() => {
         return [...courses].sort((a, b) => (a.title ?? "").localeCompare(b.title ?? ""));
@@ -111,7 +113,7 @@ export default function StudentDashboardPage() {
             if (abort.signal.aborted) {
                 return;
             }
-            setDetailError(catalogErrorMessage(e));
+            setDetailError(catalogErrorMessage(e, t));
         } finally {
             if (!abort.signal.aborted) {
                 setDetailLoading(false);
@@ -137,9 +139,9 @@ export default function StudentDashboardPage() {
     return (
         <main className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6">
             <header className="space-y-1">
-                <h1 className="text-3xl font-bold">Catalogue des cours</h1>
+                <h1 className="text-3xl font-bold">{t("student.catalog_title")}</h1>
                 <p className="text-sm text-muted-foreground">
-                    Parcourez les cours disponibles et ajoutez-les à votre liste pour y accéder.
+                    {t("student.catalog_description")}
                 </p>
             </header>
 

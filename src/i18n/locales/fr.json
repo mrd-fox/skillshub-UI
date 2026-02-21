@@ -72,6 +72,10 @@
   "home": {
     "description": "Parcours les cours disponibles. La connexion est requise uniquement pour acheter, suivre et publier."
   },
+  "student": {
+    "catalog_title": "Catalogue des cours",
+    "catalog_description": "Parcourez les cours disponibles et ajoutez-les à votre liste pour y accéder."
+  },
   "dashboard": {
     "welcome": "Bienvenue sur la plateforme",
     "create_course": "Créer un nouveau cours"

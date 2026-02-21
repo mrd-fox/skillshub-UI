@@ -5,7 +5,7 @@
 
 import api from "@/api/axios";
 import {API_ENDPOINTS} from "@/api/endpoints";
-import {InternalUser, InternalUserEnvelope} from "@/api/types/user";
+import {InternalUser, InternalUserEnvelope, InternalUserResponse} from "@/api/types/user";
 
 export const userService = {
     /**
@@ -36,17 +36,19 @@ export const userService = {
      * Promote current user to TUTOR role
      * POST /users/promote-to-tutor
      *
+     * Gateway returns 200 OK with InternalUserResponse directly (not wrapped in envelope).
+     *
      * @returns Updated user with TUTOR role
      * @throws {ApiError} If promotion fails
      */
     async promoteToTutor(): Promise<InternalUser> {
-        const res = await api.post<InternalUserEnvelope>(
+        const res = await api.post<InternalUserResponse>(
             API_ENDPOINTS.USERS.PROMOTE_TO_TUTOR,
             null
         );
 
-        const envelope = res.data;
-        const user = envelope.user;
+        // Gateway returns InternalUserResponse directly (no envelope)
+        const user = res.data;
 
         return {
             id: user.id,

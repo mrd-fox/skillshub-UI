@@ -2,7 +2,7 @@ import {useTranslation} from "react-i18next";
 import Logo from "@/assets/logo.tsx";
 import {FC, useState} from "react";
 import {Input} from "./ui/input.tsx";
-import {Heart, LogOut, ShoppingCart, User, UserPlus} from "lucide-react";
+import {Heart, LogOut, ShoppingCart, User} from "lucide-react";
 import {useAuth} from "@/context/AuthContext.tsx";
 import {
     DropdownMenu,
@@ -142,7 +142,7 @@ const Header: FC<HeaderProps> = ({logoSize = 150}) => {
                 <div className="flex-1 max-w-xl mx-4">
                     <Input
                         type="search"
-                        placeholder={t("Search...") || "Rechercher..."}
+                        placeholder={t("header.search") || "Rechercher..."}
                         className="w-full"
                     />
                 </div>
@@ -154,7 +154,7 @@ const Header: FC<HeaderProps> = ({logoSize = 150}) => {
                         }}
                         className="text-sm font-medium text-gray-700 hover:underline"
                     >
-                        {t("teach_on_skillhub") || "Teach on Skillhub"}
+                        {t("header.teach") || "Teach on Skillhub"}
                     </button>
 
                     {isAuthenticated ? (
@@ -165,7 +165,7 @@ const Header: FC<HeaderProps> = ({logoSize = 150}) => {
                                     <span className="hidden sm:inline text-sm font-medium">
                     {internalUser?.email ??
                         authUser?.email ??
-                        (t("my_account") || "Mon compte")}
+                        (t("header.account") || "Mon compte")}
                   </span>
                                 </button>
                             </DropdownMenuTrigger>
@@ -184,35 +184,21 @@ const Header: FC<HeaderProps> = ({logoSize = 150}) => {
                                     className="flex items-center gap-2 text-red-600"
                                 >
                                     <LogOut className="w-4 h-4"/>
-                                    <span>{t("logout") || "Se déconnecter"}</span>
+                                    <span>{t("auth.logout") || "Se déconnecter"}</span>
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
                     ) : (
-                        <div className="flex items-center gap-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                    login();
-                                }}
-                                className="text-sm"
-                            >
-                                {t("login") || "Se connecter"}
-                            </Button>
-
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                    login();
-                                }}
-                                className="text-sm flex items-center gap-1"
-                            >
-                                <UserPlus className="w-4 h-4"/>
-                                {t("create_account") || "Créer un compte"}
-                            </Button>
-                        </div>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                                login();
+                            }}
+                            className="text-sm"
+                        >
+                            {t("auth.login") || "Se connecter"}
+                        </Button>
                     )}
 
                     <Heart className="w-5 h-5 cursor-pointer text-gray-700 hover:text-red-500 transition"/>

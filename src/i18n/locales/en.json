@@ -1,11 +1,16 @@
 {
-  "welcome": "Welcome to the platform",
-  "create_course": "Create a new course",
-  "header": "Header",
-  "search": "Search...",
-  "teach_on_skillhub": "Teach on Skillhub",
-  "my_account": "My Account",
-  "my_profile": "My Profile",
-  "logout": "Log out",
-  "login": "Log in"
+  "auth": {
+    "login": "Log in",
+    "logout": "Log out"
+  },
+  "header": {
+    "search": "Search...",
+    "teach": "Teach on Skillhub",
+    "account": "My Account",
+    "profile": "My Profile"
+  },
+  "dashboard": {
+    "welcome": "Welcome to the platform",
+    "create_course": "Create a new course"
+  }
 }

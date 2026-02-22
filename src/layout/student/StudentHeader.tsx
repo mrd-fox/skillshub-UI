@@ -1,6 +1,7 @@
 // src/layouts/student/StudentHeader.tsx
 import {useAuth} from "@/context/AuthContext";
 import {useNavigate} from "react-router-dom";
+import {useTranslation} from "react-i18next";
 import {Button} from "@/components/ui/button";
 import {LogOut, School, User} from "lucide-react";
 import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,} from "@/components/ui/dropdown-menu";
@@ -16,6 +17,7 @@ import {TutorRequestDialog} from "@/components/tutor/TutorRequestDialog";
  * Otherwise, it opens a confirmation dialog to create tutor profile.
  */
 export default function StudentHeader() {
+    const {t} = useTranslation();
     const {
         internalUser,
         logout,
@@ -70,7 +72,7 @@ export default function StudentHeader() {
 
     return (
         <header className="flex items-center justify-between px-6 py-3 border-b bg-white shadow-sm">
-            <h1 className="text-lg font-semibold text-gray-800">Student Dashboard</h1>
+            <h1 className="text-lg font-semibold text-gray-800">{t("student.dashboard_title")}</h1>
 
             <div className="flex items-center gap-3">
 
@@ -82,7 +84,7 @@ export default function StudentHeader() {
                     className="flex items-center gap-2"
                 >
                     <School className="w-4 h-4"/>
-                    {loading ? "Processing..." : "Teach on Skillhub"}
+                    {loading ? t("common.processing") : t("header.teach")}
                 </Button>
 
                 <DropdownMenu>
@@ -104,7 +106,7 @@ export default function StudentHeader() {
                             className="flex items-center gap-2"
                         >
                             <User className="w-4 h-4"/>
-                            Profile
+                            {t("navigation.profile")}
                         </DropdownMenuItem>
 
                         <DropdownMenuItem
@@ -112,7 +114,7 @@ export default function StudentHeader() {
                             className="flex items-center gap-2 text-red-600"
                         >
                             <LogOut className="w-4 h-4"/>
-                            Logout
+                            {t("auth.logout")}
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>

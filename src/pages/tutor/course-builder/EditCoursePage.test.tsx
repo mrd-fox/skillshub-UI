@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import EditCoursePage from "./EditCoursePage";
 import {courseService} from "@/api/services";
 import {toast} from "sonner";
+import i18n from "@/i18n";
 
 // Mock dependencies
 vi.mock("@/api/services", () => ({
@@ -94,20 +95,20 @@ describe("EditCoursePage - Delete Course", () => {
             );
 
             await waitFor(() => {
-                expect(screen.getByText("Informations du cours")).toBeInTheDocument();
+                expect(screen.getByText(i18n.t('tutor.course_information'))).toBeInTheDocument();
             });
 
-            const deleteButton = screen.getByRole("button", {name: /Delete draft/i});
+            const deleteButton = screen.getByRole("button", {name: i18n.t('tutor.delete_draft')});
             expect(deleteButton).toBeInTheDocument();
             expect(deleteButton).not.toBeDisabled();
 
             await user.click(deleteButton);
 
             await waitFor(() => {
-                expect(screen.getByText("Supprimer ce brouillon ?")).toBeInTheDocument();
+                expect(screen.getByText(i18n.t('tutor.delete_draft_title'))).toBeInTheDocument();
             });
 
-            const confirmButton = screen.getByRole("button", {name: /Confirm/i});
+            const confirmButton = screen.getByRole("button", {name: i18n.t('common.confirm')});
             await user.click(confirmButton);
 
             await waitFor(() => {
@@ -116,7 +117,7 @@ describe("EditCoursePage - Delete Course", () => {
             });
 
             await waitFor(() => {
-                expect(toast.success).toHaveBeenCalledWith("Cours supprimé.");
+                expect(toast.success).toHaveBeenCalledWith(i18n.t('tutor.course_deleted'));
                 expect(mockNavigate).toHaveBeenCalledWith("/dashboard/tutor/courses");
             });
         });
@@ -157,20 +158,20 @@ describe("EditCoursePage - Delete Course", () => {
             );
 
             await waitFor(() => {
-                expect(screen.getByText("Informations du cours")).toBeInTheDocument();
+                expect(screen.getByText(i18n.t('tutor.course_information'))).toBeInTheDocument();
             });
 
-            const deleteButton = screen.getByRole("button", {name: /Delete draft/i});
+            const deleteButton = screen.getByRole("button", {name: i18n.t('tutor.delete_draft')});
             expect(deleteButton).toBeInTheDocument();
             expect(deleteButton).not.toBeDisabled();
 
             await user.click(deleteButton);
 
             await waitFor(() => {
-                expect(screen.getByText("Supprimer ce brouillon ?")).toBeInTheDocument();
+                expect(screen.getByText(i18n.t('tutor.delete_draft_title'))).toBeInTheDocument();
             });
 
-            const confirmButton = screen.getByRole("button", {name: /Confirm/i});
+            const confirmButton = screen.getByRole("button", {name: i18n.t('common.confirm')});
             await user.click(confirmButton);
 
             await waitFor(() => {
@@ -179,7 +180,7 @@ describe("EditCoursePage - Delete Course", () => {
             });
 
             await waitFor(() => {
-                expect(toast.error).toHaveBeenCalledWith("Une erreur est survenue. Réessayez plus tard.");
+                expect(toast.error).toHaveBeenCalledWith(i18n.t('api.errors.service_unavailable'));
                 expect(mockNavigate).not.toHaveBeenCalled();
                 expect(toast.success).not.toHaveBeenCalled();
             });
@@ -217,10 +218,10 @@ describe("EditCoursePage - Delete Course", () => {
             );
 
             await waitFor(() => {
-                expect(screen.getByText("Informations du cours")).toBeInTheDocument();
+                expect(screen.getByText(i18n.t('tutor.course_information'))).toBeInTheDocument();
             });
 
-            const deleteButton = screen.getByRole("button", {name: /Delete draft/i});
+            const deleteButton = screen.getByRole("button", {name: i18n.t('tutor.delete_draft')});
             expect(deleteButton).toBeDisabled();
         });
 
@@ -254,10 +255,10 @@ describe("EditCoursePage - Delete Course", () => {
             );
 
             await waitFor(() => {
-                expect(screen.getByText("Informations du cours")).toBeInTheDocument();
+                expect(screen.getByText(i18n.t('tutor.course_information'))).toBeInTheDocument();
             });
 
-            const deleteButton = screen.getByRole("button", {name: /Delete draft/i});
+            const deleteButton = screen.getByRole("button", {name: i18n.t('tutor.delete_draft')});
             expect(deleteButton).toBeDisabled();
         });
 
@@ -308,10 +309,10 @@ describe("EditCoursePage - Delete Course", () => {
             );
 
             await waitFor(() => {
-                expect(screen.getByText("Informations du cours")).toBeInTheDocument();
+                expect(screen.getByText(i18n.t('tutor.course_information'))).toBeInTheDocument();
             });
 
-            const deleteButton = screen.getByRole("button", {name: /Delete draft/i});
+            const deleteButton = screen.getByRole("button", {name: i18n.t('tutor.delete_draft')});
             expect(deleteButton).toBeDisabled();
         });
     });

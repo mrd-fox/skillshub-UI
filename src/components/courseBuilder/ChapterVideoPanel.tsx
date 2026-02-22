@@ -1,4 +1,5 @@
 import {useEffect, useMemo, useRef, useState} from "react";
+import {useTranslation} from "react-i18next";
 import * as tus from "tus-js-client";
 
 import {videoService} from "@/api/services";
@@ -118,6 +119,7 @@ function isInProgressStatus(status: VideoStatusEnum | "UNKNOWN"): boolean {
 }
 
 export default function ChapterVideoPanel(props: Readonly<Props>) {
+    const {t} = useTranslation();
     const {
         courseId,
         sectionId,
@@ -137,7 +139,7 @@ export default function ChapterVideoPanel(props: Readonly<Props>) {
 
     const [file, setFile] = useState<File | null>(null);
     const [progressPct, setProgressPct] = useState<number>(0);
-    const [message, setMessage] = useState<string>("En attente.");
+    const [message, setMessage] = useState<string>(t("tutor.video_waiting"));
 
     const [uploadLoading, setUploadLoading] = useState<boolean>(false);
     const [deleteLoading, setDeleteLoading] = useState<boolean>(false);
@@ -224,7 +226,7 @@ export default function ChapterVideoPanel(props: Readonly<Props>) {
     useEffect(() => {
         setFile(null);
         setProgressPct(0);
-        setMessage("En attente.");
+        setMessage(t("tutor.video_waiting"));
         setPreviewEnabled(false);
 
         if (fileInputRef.current) {
@@ -240,7 +242,7 @@ export default function ChapterVideoPanel(props: Readonly<Props>) {
                 tusUploadRef.current = null;
             }
         }
-    }, [courseId, sectionId, chapterId]);
+    }, [courseId, sectionId, chapterId, t]);
 
     function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
         const picked = e.target.files?.[0];
@@ -251,12 +253,12 @@ export default function ChapterVideoPanel(props: Readonly<Props>) {
 
         setFile(picked);
         setProgressPct(0);
-        setMessage("Fichier sélectionné.");
+        setMessage(t("tutor.video_file_selected"));
     }
 
     function handleResetLocal() {
         setProgressPct(0);
-        setMessage("En attente.");
+        setMessage(t("tutor.video_waiting"));
         setFile(null);
 
         if (fileInputRef.current) {
@@ -325,7 +327,7 @@ export default function ChapterVideoPanel(props: Readonly<Props>) {
         }
 
         setUploadLoading(true);
-        setMessage("Init + upload...");
+        setMessage(t("tutor.video_init_upload"));
 
         applyOptimisticVideoStatus("PENDING");
 
@@ -338,7 +340,7 @@ export default function ChapterVideoPanel(props: Readonly<Props>) {
             });
 
             if (!initRes || !initRes.uploadUrl) {
-                throw new Error("InitVideoResponse: missing uploadUrl.");
+                throw new Error(t("tutor.video_init_error"));
             }
 
             onRequestRefresh();
@@ -371,7 +373,7 @@ export default function ChapterVideoPanel(props: Readonly<Props>) {
                 upload.start();
             });
 
-            setMessage("Upload OK. Confirm...");
+            setMessage(t("tutor.video_upload_confirm"));
 
             await confirmVideo({
                 courseId,
@@ -381,7 +383,7 @@ export default function ChapterVideoPanel(props: Readonly<Props>) {
 
             applyOptimisticVideoStatus("PROCESSING");
 
-            setMessage("Confirm OK. Traitement en cours côté backend.");
+            setMessage(t("tutor.video_confirm_ok"));
             onRequestRefresh();
 
             setFile(null);
@@ -389,7 +391,7 @@ export default function ChapterVideoPanel(props: Readonly<Props>) {
                 fileInputRef.current.value = "";
             }
         } catch (err) {
-            const msg = err instanceof Error ? err.message : "Upload failed.";
+            const msg = err instanceof Error ? err.message : t("tutor.video_upload_failed");
             setMessage(msg);
             onRequestRefresh();
         } finally {
@@ -403,15 +405,15 @@ export default function ChapterVideoPanel(props: Readonly<Props>) {
         }
 
         setDeleteLoading(true);
-        setMessage("Suppression vidéo...");
+        setMessage(t("tutor.video_deleting"));
 
         try {
             await videoService.deleteVideo({courseId, sectionId, chapterId});
-            setMessage("Vidéo supprimée.");
+            setMessage(t("tutor.video_deleted"));
             setPreviewEnabled(false);
             onRequestRefresh();
         } catch (err) {
-            const msg = err instanceof Error ? err.message : "Delete video failed.";
+            const msg = err instanceof Error ? err.message : t("tutor.video_delete_failed");
             setMessage(msg);
         } finally {
             setDeleteLoading(false);
@@ -424,12 +426,12 @@ export default function ChapterVideoPanel(props: Readonly<Props>) {
                 <div className="flex items-start justify-between gap-4">
                     <div>
                         <h3 className="text-sm font-semibold">
-                            Viewer{chapterTitle ? (
+                            {t("tutor.video_viewer")}{chapterTitle ? (
                             <span className="ml-2 text-xs font-normal text-muted-foreground">— {chapterTitle}</span>
                         ) : null}
                         </h3>
                         <p className="text-xs text-muted-foreground">
-                            Statut vidéo : <span className="font-medium text-foreground">{status}</span>
+                            {t("tutor.video_status")}: <span className="font-medium text-foreground">{status}</span>
                         </p>
                     </div>
 
@@ -440,9 +442,9 @@ export default function ChapterVideoPanel(props: Readonly<Props>) {
                             size="sm"
                             onClick={() => setPreviewEnabled(true)}
                             disabled={previewEnabled}
-                            title="Load and display the Vimeo player"
+                            title={t("tutor.video_load_player")}
                         >
-                            Voir la vidéo
+                            {t("tutor.video_watch")}
                         </Button>
                     ) : null}
                 </div>
@@ -457,15 +459,13 @@ export default function ChapterVideoPanel(props: Readonly<Props>) {
                                             {video?.thumbnailUrl ? (
                                                 <img
                                                     src={video.thumbnailUrl}
-                                                    alt="Video thumbnail"
+                                                    alt={t("tutor.video_thumbnail_alt")}
                                                     className="h-full w-full object-cover"
                                                 />
                                             ) : (
                                                 <div
                                                     className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
-                                                    Preview disponible. Clique sur{" "}
-                                                    <span
-                                                        className="ml-1 font-medium text-foreground">Voir la vidéo</span>.
+                                                    {t("tutor.video_preview_available")}
                                                 </div>
                                             )}
                                         </>
@@ -475,7 +475,7 @@ export default function ChapterVideoPanel(props: Readonly<Props>) {
                                                 <div className="h-full w-full">
                                                     <VimeoPlayer
                                                         sourceUri={sourceUri}
-                                                        embedHash={(video as any)?.embedHash ?? null}
+                                                        embedHash={video?.embedHash ?? null}
                                                         thumbnailUrl={video?.thumbnailUrl ?? null}
                                                         minimalUi={true}
                                                         autoplay={false}
@@ -487,7 +487,7 @@ export default function ChapterVideoPanel(props: Readonly<Props>) {
                                             ) : (
                                                 <div
                                                     className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
-                                                    Vidéo READY mais sourceUri introuvable.
+                                                    {t("tutor.video_ready_no_source")}
                                                 </div>
                                             )}
                                         </>
@@ -497,8 +497,8 @@ export default function ChapterVideoPanel(props: Readonly<Props>) {
                                 <div
                                     className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
                                     {status === "PROCESSING" || status === "PENDING" || status === "UPLOADED"
-                                        ? "Traitement en cours. La structure du cours doit être verrouillée."
-                                        : "Aucune vidéo prête. Upload requis."}
+                                        ? t("tutor.video_processing_lock")
+                                        : t("tutor.video_no_video_ready")}
                                 </div>
                             )}
                         </div>
@@ -511,20 +511,20 @@ export default function ChapterVideoPanel(props: Readonly<Props>) {
             <div className="space-y-3">
                 <div className="flex items-start justify-between gap-4">
                     <div>
-                        <h3 className="text-sm font-semibold">Upload</h3>
+                        <h3 className="text-sm font-semibold">{t("common.upload")}</h3>
                         <p className="text-xs text-muted-foreground">
-                            Upload = init + TUS + confirm automatique.
+                            {t("tutor.video_upload_description")}
                         </p>
                     </div>
 
                     <Button variant="destructive" size="sm" onClick={handleDeleteVideo} disabled={!canDelete}>
-                        Delete
+                        {t("common.delete")}
                     </Button>
                 </div>
 
                 {readOnly ? (
                     <div className="text-xs text-muted-foreground">
-                        Upload et suppression désactivés : édition verrouillée.
+                        {t("tutor.video_upload_disabled_readonly")}
                     </div>
                 ) : null}
 
@@ -535,7 +535,7 @@ export default function ChapterVideoPanel(props: Readonly<Props>) {
                 ) : null}
 
                 <div className="space-y-2">
-                    <div className="text-xs font-medium">Fichier vidéo</div>
+                    <div className="text-xs font-medium">{t("tutor.video_file_label")}</div>
                     <Input
                         ref={fileInputRef}
                         type="file"
@@ -545,24 +545,24 @@ export default function ChapterVideoPanel(props: Readonly<Props>) {
                     />
                     {isProcessingOrPending ? (
                         <div className="text-xs text-muted-foreground">
-                            Upload bloqué : une vidéo est déjà en cours de traitement (PENDING/PROCESSING/UPLOADED).
+                            {t("tutor.video_upload_blocked")}
                         </div>
                     ) : null}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
                     <Button onClick={handleUploadAll} disabled={!canUpload}>
-                        {uploadLoading ? "Uploading..." : "Upload"}
+                        {uploadLoading ? t("tutor.video_uploading") : t("common.upload")}
                     </Button>
 
                     <Button variant="outline" onClick={handleResetLocal} disabled={isBusy || Boolean(readOnly)}>
-                        Reset
+                        {t("common.reset")}
                     </Button>
                 </div>
 
                 <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">Progress</span>
+                        <span className="text-muted-foreground">{t("tutor.video_progress")}</span>
                         <span className="tabular-nums">{progressPct}%</span>
                     </div>
                     <Progress value={progressPct}/>

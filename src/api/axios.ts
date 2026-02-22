@@ -1,5 +1,6 @@
 import axios, {AxiosError, InternalAxiosRequestConfig} from "axios";
 import {toast} from "sonner";
+import i18n from "@/i18n";
 
 export type ApiError = {
     status: number;
@@ -24,13 +25,13 @@ const api = axios.create({
 // Single mapping HTTP status -> UX message
 function mapStatusToMessage(status: number): string {
     if (status === 401) {
-        return "Votre session a expiré. Veuillez vous reconnecter.";
+        return i18n.t("api.errors.session_expired");
     } else if (status === 403) {
-        return "Accès refusé.";
+        return i18n.t("api.errors.access_denied");
     } else if (status >= 500) {
-        return "Service indisponible. Réessayez plus tard.";
+        return i18n.t("api.errors.service_unavailable");
     } else {
-        return "Une erreur est survenue. Réessayez.";
+        return i18n.t("api.errors.generic_retry");
     }
 }
 

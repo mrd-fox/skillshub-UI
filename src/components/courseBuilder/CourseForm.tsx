@@ -1,24 +1,32 @@
 // src/components/courseBuilder/CreateCourseForm.tsx
 import {courseService} from "@/api/services";
 import {useState} from "react";
+import {useTranslation} from "react-i18next";
 import {z} from "zod";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {Textarea} from "@/components/ui/textarea";
 import {toast} from "sonner";
 import {useNavigate} from "react-router-dom";
+import {parsePriceEurosToCents} from "@/lib/price";
 
-const courseSchema = z.object({
-    title: z.string().min(3, "Le titre est requis (min 3 caractères)"),
-    description: z.string().min(10, "La description est requise (min 10 caractères)"),
-    price: z.number().min(0, "Le prix doit être positif"),
+const createCourseSchema = (t: (key: string) => string) => z.object({
+    title: z.string().min(3, t("tutor.form_title_required")),
+    description: z.string().min(10, t("tutor.form_description_required")),
+    priceInput: z.string().refine((val) => {
+        if (val.trim() === "" || val.trim() === "0") {
+            return true;
+        }
+        const cents = parsePriceEurosToCents(val);
+        return cents !== null && cents >= 0;
+    }, t("tutor.form_price_positive")),
     sections: z.array(
         z.object({
-            title: z.string().min(1, "Le titre de section est requis"),
+            title: z.string().min(1, t("tutor.form_section_title_required")),
             position: z.number(),
             chapters: z.array(
                 z.object({
-                    title: z.string().min(1, "Le titre du chapitre est requis"),
+                    title: z.string().min(1, t("tutor.form_chapter_title_required")),
                     position: z.number().optional(),
                 })
             ),
@@ -26,13 +34,14 @@ const courseSchema = z.object({
     ).optional(),
 });
 
-type CoursePayload = z.infer<typeof courseSchema>;
+type CoursePayload = z.infer<ReturnType<typeof createCourseSchema>>;
 
 export default function CreateCourseForm({sections}: { sections: any[] }) {
+    const {t} = useTranslation();
     const [form, setForm] = useState<CoursePayload>({
         title: "",
         description: "",
-        price: 0,
+        priceInput: "",
         sections: [],
     });
     const navigate = useNavigate();
@@ -46,6 +55,7 @@ export default function CreateCourseForm({sections}: { sections: any[] }) {
         e.preventDefault();
 
         const payload = {...form, sections};
+        const courseSchema = createCourseSchema(t);
         const validation = courseSchema.safeParse(payload);
 
         if (!validation.success) {
@@ -58,14 +68,33 @@ export default function CreateCourseForm({sections}: { sections: any[] }) {
         }
 
         try {
-            const createdCourse = await courseService.createCourse(payload);
-            toast.success("Cours créé avec succès !");
+            const priceCents = parsePriceEurosToCents(form.priceInput);
+
+            if (priceCents === null) {
+                setErrors({priceInput: t("tutor.form_price_positive")});
+                return;
+            }
+
+            if (priceCents < 0) {
+                setErrors({priceInput: t("tutor.price_negative_error")});
+                return;
+            }
+
+            const apiPayload = {
+                title: form.title,
+                description: form.description,
+                price: priceCents,
+                sections,
+            };
+
+            const createdCourse = await courseService.createCourse(apiPayload);
+            toast.success(t("tutor.course_created_success"));
             navigate(`/dashboard/tutor/course-builder/${createdCourse.id}`, {
                 state: {course: createdCourse},
             });
         } catch (err: any) {
             console.error("🔥 API error:", err);
-            toast.error("Erreur lors de la création du cours.");
+            toast.error(t("tutor.course_create_error"));
         }
     };
 
@@ -75,9 +104,9 @@ export default function CreateCourseForm({sections}: { sections: any[] }) {
             className="bg-white p-6 rounded-xl shadow-md space-y-6 border border-gray-100"
         >
             <div className="space-y-2">
-                <label className="font-medium text-sm">Titre du cours</label>
+                <label className="font-medium text-sm">{t("tutor.form_course_title")}</label>
                 <Input
-                    placeholder="Ex: Apprendre React de zéro"
+                    placeholder={t("tutor.form_title_placeholder")}
                     value={form.title}
                     onChange={(e) => handleChange("title", e.target.value)}
                 />
@@ -85,9 +114,9 @@ export default function CreateCourseForm({sections}: { sections: any[] }) {
             </div>
 
             <div className="space-y-2">
-                <label className="font-medium text-sm">Description</label>
+                <label className="font-medium text-sm">{t("tutor.description")}</label>
                 <Textarea
-                    placeholder="Décrivez le contenu et les objectifs du cours"
+                    placeholder={t("tutor.form_description_placeholder")}
                     value={form.description}
                     onChange={(e) => handleChange("description", e.target.value)}
                 />
@@ -95,19 +124,18 @@ export default function CreateCourseForm({sections}: { sections: any[] }) {
             </div>
 
             <div className="space-y-2">
-                <label className="font-medium text-sm">Prix (€)</label>
+                <label className="font-medium text-sm">{t("tutor.form_price_label")}</label>
                 <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={form.price}
-                    onChange={(e) => handleChange("price", Number(e.target.value))}
+                    type="text"
+                    placeholder="0"
+                    value={form.priceInput}
+                    onChange={(e) => handleChange("priceInput", e.target.value)}
                 />
-                {errors["price"] && <p className="text-sm text-red-600">{errors["price"]}</p>}
+                {errors["priceInput"] && <p className="text-sm text-red-600">{errors["priceInput"]}</p>}
             </div>
 
             <Button type="submit" className="w-full !bg-[#2A6AEE] !text-white hover:!bg-[#1f57ca]">
-                Créer le cours
+                {t("tutor.form_create_course")}
             </Button>
         </form>
     );

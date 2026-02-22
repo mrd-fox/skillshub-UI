@@ -1,10 +1,17 @@
+/**
+ * Student Dashboard Page
+ * Displays published course catalog with enrollment CTA
+ * Allows students to browse and enroll in courses
+ */
+
 import {useEffect, useMemo, useRef, useState} from "react";
 import {useTranslation} from "react-i18next";
 import api, {ApiError} from "@/api/axios";
 import {API_ENDPOINTS} from "@/api/endpoints";
+import {PublicCourseDetailResponse, PublicCourseListItem} from "@/api/types/public";
 import {CourseCatalogGrid} from "@/components/catalog/CourseCatalogGrid";
 import {CourseDetailDialog} from "@/components/catalog/CourseDetailDialog";
-import {PublicCourseDetailResponse, PublicCourseListItem} from "@/api/types/public";
+import {EnrollmentCta} from "@/components/enrollment/EnrollmentCta";
 
 function isApiError(e: unknown): e is ApiError {
     if (!e || typeof e !== "object") {
@@ -14,8 +21,7 @@ function isApiError(e: unknown): e is ApiError {
     return typeof candidate.status === "number" && typeof candidate.message === "string";
 }
 
-function publicCatalogErrorMessage(e: unknown, t: (key: string) => string): string {
-    // Public page: never present auth/session semantics to the user
+function catalogErrorMessage(e: unknown, t: (key: string) => string): string {
     if (isApiError(e)) {
         if (e.status === 401 || e.status === 403) {
             return t("errors.catalog_unauthorized");
@@ -30,7 +36,7 @@ function publicCatalogErrorMessage(e: unknown, t: (key: string) => string): stri
     return t("errors.catalog_load_failed");
 }
 
-export default function HomePage() {
+export default function StudentDashboardPage() {
     const {t} = useTranslation();
     const [loading, setLoading] = useState<boolean>(true);
     const [courses, setCourses] = useState<PublicCourseListItem[]>([]);
@@ -40,6 +46,7 @@ export default function HomePage() {
     const [detailLoading, setDetailLoading] = useState<boolean>(false);
     const [detailError, setDetailError] = useState<string | null>(null);
     const [detail, setDetail] = useState<PublicCourseDetailResponse | null>(null);
+    const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
 
     const detailAbortRef = useRef<AbortController | null>(null);
 
@@ -58,11 +65,10 @@ export default function HomePage() {
                 const data = Array.isArray(res.data) ? res.data : [];
                 setCourses(data);
             } catch (e: unknown) {
-                // Abort is not an error from user perspective
                 if (abort.signal.aborted) {
                     return;
                 }
-                setError(publicCatalogErrorMessage(e, t));
+                setError(catalogErrorMessage(e, t));
                 setCourses([]);
             } finally {
                 if (!abort.signal.aborted) {
@@ -84,8 +90,8 @@ export default function HomePage() {
 
     async function openCourseDetail(courseId: string): Promise<void> {
         setDetailOpen(true);
+        setSelectedCourseId(courseId);
 
-        // Cancel any pending detail call
         if (detailAbortRef.current) {
             detailAbortRef.current.abort();
         }
@@ -107,7 +113,7 @@ export default function HomePage() {
             if (abort.signal.aborted) {
                 return;
             }
-            setDetailError(publicCatalogErrorMessage(e, t));
+            setDetailError(catalogErrorMessage(e, t));
         } finally {
             if (!abort.signal.aborted) {
                 setDetailLoading(false);
@@ -119,7 +125,6 @@ export default function HomePage() {
         setDetailOpen(open);
 
         if (!open) {
-            // Cancel pending detail call when closing dialog
             if (detailAbortRef.current) {
                 detailAbortRef.current.abort();
             }
@@ -127,24 +132,30 @@ export default function HomePage() {
             setDetail(null);
             setDetailError(null);
             setDetailLoading(false);
+            setSelectedCourseId(null);
         }
     }
 
     return (
         <main className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6">
             <header className="space-y-1">
-                <h1 className="text-3xl font-bold">Skillshub</h1>
+                <h1 className="text-3xl font-bold">{t("student.catalog_title")}</h1>
                 <p className="text-sm text-muted-foreground">
-                    {t("home.description")}
+                    {t("student.catalog_description")}
                 </p>
             </header>
 
-            <CourseCatalogGrid
-                courses={sortedCourses}
-                onOpenDetails={openCourseDetail}
-                loading={loading}
-                error={error}
-            />
+            <section>
+                <CourseCatalogGrid
+                    courses={sortedCourses}
+                    onOpenDetails={openCourseDetail}
+                    loading={loading}
+                    error={error}
+                    renderActions={(courseId) => (
+                        <EnrollmentCta courseId={courseId} variant="card"/>
+                    )}
+                />
+            </section>
 
             <CourseDetailDialog
                 course={detail}
@@ -152,6 +163,11 @@ export default function HomePage() {
                 onOpenChange={handleDetailOpenChange}
                 loading={detailLoading}
                 error={detailError}
+                footerActions={
+                    selectedCourseId ? (
+                        <EnrollmentCta courseId={selectedCourseId} variant="modal"/>
+                    ) : null
+                }
             />
         </main>
     );

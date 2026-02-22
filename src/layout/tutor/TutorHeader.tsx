@@ -1,6 +1,7 @@
 // src/layouts/tutor/TutorHeader.tsx
 import {useAuth} from "@/context/AuthContext";
 import {useNavigate} from "react-router-dom";
+import {useTranslation} from "react-i18next";
 import {Button} from "@/components/ui/button";
 import {GraduationCap, LogOut, User} from "lucide-react";
 import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,} from "@/components/ui/dropdown-menu";
@@ -12,6 +13,7 @@ import {Avatar, AvatarFallback} from "@/components/ui/avatar";
  * and compact user dropdown.
  */
 export default function TutorHeader() {
+    const {t} = useTranslation();
     const {
         internalUser,
         roles,
@@ -36,7 +38,7 @@ export default function TutorHeader() {
     return (
         <header className="flex items-center justify-between px-6 py-3 border-b bg-white shadow-sm">
             <h1 className="text-lg font-semibold text-gray-800">
-                Tutor Dashboard
+                {t("tutor.dashboard_title")}
             </h1>
 
             <div className="flex items-center gap-3">
@@ -49,7 +51,7 @@ export default function TutorHeader() {
                         onClick={handleSwitchToStudent}
                     >
                         <GraduationCap className="w-4 h-4"/>
-                        Learn on Skillhub
+                        {t("tutor.learn_button")}
                     </Button>
                 )}
 
@@ -72,7 +74,7 @@ export default function TutorHeader() {
                             className="flex items-center gap-2"
                         >
                             <User className="w-4 h-4"/>
-                            Profile
+                            {t("navigation.profile")}
                         </DropdownMenuItem>
 
                         <DropdownMenuItem
@@ -80,7 +82,7 @@ export default function TutorHeader() {
                             className="flex items-center gap-2 text-red-600"
                         >
                             <LogOut className="w-4 h-4"/>
-                            Logout
+                            {t("auth.logout")}
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>

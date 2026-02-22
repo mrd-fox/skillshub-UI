@@ -5,7 +5,7 @@
 
 import api from "@/api/axios";
 import {API_ENDPOINTS} from "@/api/endpoints";
-import {InternalUser, InternalUserEnvelope} from "@/api/types/user";
+import {InternalUser, InternalUserEnvelope, InternalUserResponse} from "@/api/types/user";
 
 export const userService = {
     /**
@@ -25,6 +25,7 @@ export const userService = {
             keycloakId: user.externalId,
             email: user.email,
             roles: (user.roles ?? []).map((r) => r.name),
+            enrolledCourseIds: user.enrolledCourseIds ?? [],
             firstName: user.firstName,
             lastName: user.lastName,
             active: user.active,
@@ -35,32 +36,40 @@ export const userService = {
      * Promote current user to TUTOR role
      * POST /users/promote-to-tutor
      *
+     * Gateway returns 200 OK with InternalUserResponse directly (not wrapped in envelope).
+     *
      * @returns Updated user with TUTOR role
      * @throws {ApiError} If promotion fails
      */
     async promoteToTutor(): Promise<InternalUser> {
-        const res = await api.post<InternalUserEnvelope>(
+        const res = await api.post<InternalUserResponse>(
             API_ENDPOINTS.USERS.PROMOTE_TO_TUTOR,
             null
         );
 
-        const envelope = res.data;
-        const user = envelope.user ?? envelope;
-
-        // Normalize roles (can be string[] or RoleResponse[])
-        const rawRoles = user.roles ?? [];
-        const roles = rawRoles.map((r: any) =>
-            typeof r === "string" ? r : r.name
-        );
+        // Gateway returns InternalUserResponse directly (no envelope)
+        const user = res.data;
 
         return {
             id: user.id,
             keycloakId: user.externalId,
             email: user.email,
-            roles,
+            roles: (user.roles ?? []).map((r) => r.name),
+            enrolledCourseIds: user.enrolledCourseIds ?? [],
             firstName: user.firstName,
             lastName: user.lastName,
             active: user.active,
         };
+    },
+
+    /**
+     * Enroll current user in a course (idempotent)
+     * PUT /users/me/enrollments/:courseId
+     *
+     * @param courseId - The course ID to enroll in
+     * @throws {ApiError} If enrollment fails
+     */
+    async enrollInCourse(courseId: string): Promise<void> {
+        await api.put(API_ENDPOINTS.USERS.ENROLL(courseId));
     },
 };

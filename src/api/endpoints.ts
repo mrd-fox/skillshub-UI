@@ -55,6 +55,12 @@ export const API_ENDPOINTS = {
          * POST /users/promote-to-tutor
          */
         PROMOTE_TO_TUTOR: "/users/promote-to-tutor",
+
+        /**
+         * Enroll current user in a course (idempotent)
+         * PUT /users/me/enrollments/:courseId
+         */
+        ENROLL: (courseId: string) => `/users/me/enrollments/${courseId}`,
     },
 
     // ============================================
@@ -96,6 +102,33 @@ export const API_ENDPOINTS = {
          * POST /course/:courseId/publish
          */
         PUBLISH: (courseId: string) => `/course/${courseId}/publish`,
+    },
+
+    // ============================================
+    // Course Search (Batch operations)
+    // ============================================
+    COURSE_SEARCH: {
+        /**
+         * Search courses by IDs (for enrolled courses)
+         * POST /courses/search
+         */
+        BY_IDS: "/courses/search",
+    },
+
+    // ============================================
+    // Student Courses (enrolled content access)
+    // ============================================
+    STUDENT: {
+        /**
+         * Get enrolled course content (sections, chapters, videos)
+         * GET /student/courses/:courseId
+         *
+         * Backend enforces:
+         * - User must be enrolled
+         * - Course must be PUBLISHED
+         * - Returns full course structure with video metadata
+         */
+        COURSE_BY_ID: (courseId: string) => `/student/courses/${courseId}`,
     },
 
     // ============================================
@@ -190,7 +223,7 @@ export const API_ENDPOINTS = {
  * Used by axios interceptor to prevent auth redirects on public pages
  */
 export function isPublicEndpoint(url: string): boolean {
-    return url.includes("/api/public/");
+    return url.includes("/public");
 }
 
 /**
@@ -198,5 +231,5 @@ export function isPublicEndpoint(url: string): boolean {
  * Used by axios interceptor to prevent redirect loops
  */
 export function isAuthEndpoint(url: string): boolean {
-    return url.includes("/api/auth/login") || url.includes("/api/auth/logout");
+    return url.includes("/auth/login") || url.includes("/auth/logout");
 }

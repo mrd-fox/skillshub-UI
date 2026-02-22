@@ -1,4 +1,5 @@
 import {useMemo, useState} from "react";
+import {useTranslation} from "react-i18next";
 import {Textarea} from "@/components/ui/textarea.tsx";
 import {useCourseBuilder} from "@/layout/tutor";
 import {useAuth} from "@/context/AuthContext.tsx";
@@ -21,6 +22,7 @@ import {Button} from "@/components/ui/button.tsx";
 import {courseService} from "@/api/services";
 import {toast} from "sonner";
 import {useNavigate} from "react-router-dom";
+import {centsToEurosString, formatPriceFromCents, parsePriceEurosToCents} from "@/lib/price";
 
 type VideoStatus = string | null | undefined;
 
@@ -84,27 +86,28 @@ function getDeleteDisabledReason(args: Readonly<{
     isWaitingValidation: boolean;
     isPublished: boolean;
     processingLock: boolean;
-}>): string {
+}>, t: (key: string) => string): string {
     if (args.isWaitingValidation) {
-        return "Désactivé : en attente de validation.";
+        return t("tutor.delete_disabled_waiting_validation");
     }
 
     if (args.isPublished) {
-        return "Désactivé : cours publié.";
+        return t("tutor.delete_disabled_published");
     }
 
     if (args.processingLock) {
-        return "Désactivé : vidéo en PENDING/PROCESSING.";
+        return t("tutor.delete_disabled_processing");
     }
 
     if (args.courseStatus !== "DRAFT") {
-        return "Désactivé : seulement pour DRAFT.";
+        return t("tutor.delete_disabled_not_draft");
     }
 
-    return "Désactivé.";
+    return t("tutor.delete_disabled_generic");
 }
 
 export default function EditCoursePage() {
+    const {t} = useTranslation();
     const {course, setCourse, loading} = useCourseBuilder();
     const {internalUser} = useAuth();
     const navigate = useNavigate();
@@ -177,8 +180,8 @@ export default function EditCoursePage() {
             isWaitingValidation,
             isPublished,
             processingLock,
-        });
-    }, [canDeleteDraft, course?.status, isWaitingValidation, isPublished, processingLock]);
+        }, t);
+    }, [canDeleteDraft, course?.status, isWaitingValidation, isPublished, processingLock, t]);
 
     async function handleDeleteCourse(): Promise<void> {
         if (!course?.id) {
@@ -189,10 +192,10 @@ export default function EditCoursePage() {
 
         try {
             await courseService.deleteCourse(course.id);
-            toast.success("Cours supprimé.");
+            toast.success(t("tutor.course_deleted"));
             navigate("/dashboard/tutor/courses");
         } catch {
-            toast.error("Une erreur est survenue. Réessayez plus tard.");
+            toast.error(t("api.errors.service_unavailable"));
         } finally {
             setIsDeleting(false);
         }
@@ -202,13 +205,13 @@ export default function EditCoursePage() {
         return (
             <div className="space-y-6">
                 <div>
-                    <h1 className="text-2xl font-bold">Informations du cours</h1>
-                    <p className="mt-1 text-sm text-muted-foreground">Chargement…</p>
+                    <h1 className="text-2xl font-bold">{t("tutor.course_information")}</h1>
+                    <p className="mt-1 text-sm text-muted-foreground">{t("common.loading")}</p>
                 </div>
 
                 <Card>
                     <CardHeader>
-                        <CardTitle>Détails</CardTitle>
+                        <CardTitle>{t("tutor.details")}</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="h-10 w-full rounded-md bg-muted"/>
@@ -223,8 +226,8 @@ export default function EditCoursePage() {
     if (!course) {
         return (
             <div className="space-y-2">
-                <h1 className="text-2xl font-bold">Informations du cours</h1>
-                <p className="text-sm text-muted-foreground">Aucune donnée de cours disponible.</p>
+                <h1 className="text-2xl font-bold">{t("tutor.course_information")}</h1>
+                <p className="text-sm text-muted-foreground">{t("tutor.no_course_data")}</p>
             </div>
         );
     }
@@ -234,31 +237,27 @@ export default function EditCoursePage() {
             <div className="space-y-1">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                     <div>
-                        <h1 className="text-2xl font-bold">Informations du cours</h1>
+                        <h1 className="text-2xl font-bold">{t("tutor.course_information")}</h1>
                         <p className="mt-1 text-sm text-muted-foreground">
-                            Champs modifiables : <strong>titre</strong> et <strong>description</strong>. Les changements
-                            sont persistés via le bouton global <strong>Save course</strong>.
+                            {t("tutor.editable_fields_description")}
                         </p>
 
                         {isWaitingValidation ? (
                             <div className="mt-2 rounded-lg border bg-muted/20 p-3 text-sm text-muted-foreground">
-                                Ce cours est <strong>en attente de validation</strong> : édition et suppression
-                                désactivées.
+                                {t("tutor.waiting_validation_notice")}
                             </div>
                         ) : null}
 
                         {isPublished ? (
                             <div className="mt-2 rounded-lg border bg-muted/20 p-3 text-sm text-muted-foreground">
-                                Ce cours est <strong>publié</strong> : édition et suppression désactivées.
+                                {t("tutor.published_notice")}
                             </div>
                         ) : null}
 
                         {!isWaitingValidation && !isPublished && processingLock ? (
                             <div
                                 className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                                Édition désactivée : au moins une vidéo est en <strong>PENDING/PROCESSING</strong>. Le
-                                polling backend/UI peut rafraîchir l&apos;état du cours et écraser des changements non
-                                sauvegardés.
+                                {t("tutor.processing_lock_notice")}
                             </div>
                         ) : null}
                     </div>
@@ -273,28 +272,28 @@ export default function EditCoursePage() {
 
             <Card>
                 <CardHeader>
-                    <CardTitle>Détails</CardTitle>
+                    <CardTitle>{t("tutor.details")}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-5">
                     <div className="space-y-2">
-                        <Label>Auteur</Label>
+                        <Label>{t("tutor.author")}</Label>
                         <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">{authorLabel}</div>
                     </div>
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
-                            <Label>ID du cours</Label>
+                            <Label>{t("tutor.course_id")}</Label>
                             <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm font-mono">{course.id}</div>
                         </div>
 
                         <div className="space-y-2">
-                            <Label>Statut</Label>
+                            <Label>{t("common.status")}</Label>
                             <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">{course.status}</div>
                         </div>
                     </div>
 
                     <div className="space-y-2">
-                        <Label htmlFor="course-title">Titre</Label>
+                        <Label htmlFor="course-title">{t("tutor.title")}</Label>
                         <Input
                             id="course-title"
                             data-cy="course-title"
@@ -316,7 +315,7 @@ export default function EditCoursePage() {
                     </div>
 
                     <div className="space-y-2">
-                        <Label htmlFor="course-description">Description</Label>
+                        <Label htmlFor="course-description">{t("tutor.description")}</Label>
                         <Textarea
                             id="course-description"
                             data-cy="course-description"
@@ -340,13 +339,54 @@ export default function EditCoursePage() {
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
-                            <Label>Créé le</Label>
+                            <Label htmlFor="course-price">{t("tutor.price_euros")}</Label>
+                            <Input
+                                id="course-price"
+                                data-cy="course-price"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={centsToEurosString(course.price ?? null)}
+                                disabled={!canEditInfo}
+                                onChange={(e) => {
+                                    const inputValue = e.target.value;
+                                    const priceCents = parsePriceEurosToCents(inputValue);
+
+                                    if (priceCents !== null && priceCents < 0) {
+                                        toast.error(t("tutor.price_negative_error"));
+                                        return;
+                                    }
+
+                                    setCourse((prev) => {
+                                        if (!prev) {
+                                            return prev;
+                                        }
+                                        return {
+                                            ...prev,
+                                            price: priceCents,
+                                        };
+                                    });
+                                }}
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>{t("tutor.price")}</Label>
+                            <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm font-semibold">
+                                {formatPriceFromCents(course.price ?? null)}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                            <Label>{t("tutor.created_at")}</Label>
                             <div
                                 className="rounded-md border bg-muted/40 px-3 py-2 text-sm">{formatDate(course.createdAt)}</div>
                         </div>
 
                         <div className="space-y-2">
-                            <Label>Dernière mise à jour</Label>
+                            <Label>{t("tutor.updated_at")}</Label>
                             <div
                                 className="rounded-md border bg-muted/40 px-3 py-2 text-sm">{formatDate(course.updatedAt)}</div>
                         </div>
@@ -357,29 +397,30 @@ export default function EditCoursePage() {
                         <div className="rounded-lg border p-4">
                             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
-                                    <div className="text-sm font-semibold">Zone dangereuse</div>
+                                    <div className="text-sm font-semibold">{t("tutor.danger_zone")}</div>
                                     <div className="mt-1 text-xs text-muted-foreground">
-                                        Supprimer le cours (brouillon uniquement).
+                                        {t("tutor.danger_zone_description")}
                                     </div>
                                 </div>
 
                                 <AlertDialog>
                                     <AlertDialogTrigger asChild>
                                         <Button variant="destructive" disabled={!canDeleteDraft || isDeleting}>
-                                            Delete draft
+                                            {t("tutor.delete_draft")}
                                         </Button>
                                     </AlertDialogTrigger>
 
                                     <AlertDialogContent>
                                         <AlertDialogHeader>
-                                            <AlertDialogTitle>Supprimer ce brouillon ?</AlertDialogTitle>
+                                            <AlertDialogTitle>{t("tutor.delete_draft_title")}</AlertDialogTitle>
                                             <AlertDialogDescription>
-                                                Cette action est destructive et irréversible.
+                                                {t("tutor.delete_draft_warning")}
                                             </AlertDialogDescription>
                                         </AlertDialogHeader>
 
                                         <AlertDialogFooter>
-                                            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                                            <AlertDialogCancel
+                                                disabled={isDeleting}>{t("common.cancel")}</AlertDialogCancel>
                                             <AlertDialogAction
                                                 disabled={isDeleting}
                                                 onClick={(e) => {
@@ -387,7 +428,7 @@ export default function EditCoursePage() {
                                                     handleDeleteCourse();
                                                 }}
                                             >
-                                                {isDeleting ? "Suppression..." : "Confirm"}
+                                                {isDeleting ? t("tutor.deleting") : t("common.confirm")}
                                             </AlertDialogAction>
                                         </AlertDialogFooter>
                                     </AlertDialogContent>

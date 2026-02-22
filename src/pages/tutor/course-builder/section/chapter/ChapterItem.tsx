@@ -1,4 +1,5 @@
 import {useEffect, useRef, useState} from "react";
+import {useTranslation} from "react-i18next";
 import {ArrowDown, ArrowUp, Pencil, Trash2} from "lucide-react";
 import {Button} from "@/components/ui/button.tsx";
 import {Input} from "@/components/ui/input.tsx";
@@ -35,6 +36,7 @@ export default function ChapterItem({
                                         onRenameChapter,
                                         onDeleteChapter,
                                     }: Readonly<Props>) {
+    const {t} = useTranslation();
     const [isEditing, setIsEditing] = useState<boolean>(false);
     const [draftTitle, setDraftTitle] = useState<string>(chapter.title ?? "");
     const inputRef = useRef<HTMLInputElement | null>(null);
@@ -129,20 +131,20 @@ export default function ChapterItem({
                         }}
                         onBlur={commit}
                         className="h-9"
-                        aria-label="Rename chapter"
+                        aria-label={t("tutor.rename_chapter")}
                         disabled={readOnly}
                     />
                 ) : (
                     <div className="min-w-0">
                         <div className="text-sm font-semibold">
-                            Chapitre {index + 1} —{" "}
+                            {t("tutor.chapter_number", {number: index + 1})} —{" "}
                             <span className="font-semibold">
-                                {chapter.title || "Sans titre"}
+                                {chapter.title || t("common.untitled")}
                             </span>
                         </div>
 
                         <div className="mt-1 text-xs text-muted-foreground">
-                            Status vidéo :{" "}
+                            {t("tutor.video_status")}:{" "}
                             <span className="font-medium text-foreground">
                                 {chapter.video?.status ?? "—"}
                             </span>
@@ -157,7 +159,7 @@ export default function ChapterItem({
                     variant="ghost"
                     size="icon"
                     disabled={actionsLocked}
-                    aria-label="Rename chapter"
+                    aria-label={t("tutor.rename_chapter")}
                     onClick={() => setIsEditing(true)}
                 >
                     <Pencil className="h-4 w-4"/>
@@ -169,21 +171,21 @@ export default function ChapterItem({
                     size="icon"
                     className="text-destructive hover:text-destructive"
                     disabled={readOnly}
-                    aria-label="Delete chapter"
+                    aria-label={t("tutor.delete_chapter")}
                     onClick={() => onDeleteChapter(chapter.id)}
                 >
                     <Trash2 className="h-4 w-4"/>
                 </Button>
 
                 <MoveButton
-                    label="Déplacer le chapitre vers le haut"
+                    label={t("tutor.move_chapter_up")}
                     disabled={readOnly || !canMoveUp || isEditing}
                     onClick={onMoveUp}
                     icon={<ArrowUp className="h-4 w-4"/>}
                 />
 
                 <MoveButton
-                    label="Déplacer le chapitre vers le bas"
+                    label={t("tutor.move_chapter_down")}
                     disabled={readOnly || !canMoveDown || isEditing}
                     onClick={onMoveDown}
                     icon={<ArrowDown className="h-4 w-4"/>}

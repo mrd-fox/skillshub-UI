@@ -10,7 +10,12 @@ export type CourseStatus =
     | "WAITING_VALIDATION"
     | "VALIDATED"
     | "PUBLISHED"
-    | "REJECTED";
+    | "REJECTED"
+    | "ARCHIVED"
+    | "PENDING"
+    | "PROCESSING"
+    | "READY"
+    | "FAILED";
 
 export type Chapter = {
     id: string;
@@ -46,6 +51,7 @@ export type CourseListItem = {
     title?: string;
     status: CourseStatus;
     updatedAt?: string;
+    price?: number | null;
 };
 
 // Create course payload

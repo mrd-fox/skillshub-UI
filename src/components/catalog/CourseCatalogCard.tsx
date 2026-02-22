@@ -8,6 +8,7 @@ import {ReactNode} from "react";
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
 import {SkeletonLoader} from "@/components/ui/SkeletonLoader";
 import {PublicCourseListItem} from "@/api/types/public";
+import {formatPriceFromCents} from "@/lib/price";
 
 interface CourseCatalogCardProps {
     course: PublicCourseListItem;
@@ -15,21 +16,10 @@ interface CourseCatalogCardProps {
     actions?: ReactNode;
 }
 
-function formatPrice(priceCents: number | null | undefined): string {
-    if (priceCents === null || priceCents === undefined) {
-        return "—";
-    }
-    if (priceCents === 0) {
-        return "Gratuit";
-    }
-    const euros = priceCents / 100;
-    return euros.toLocaleString("fr-FR", {style: "currency", currency: "EUR"});
-}
-
 export function CourseCatalogCard({course, onOpenDetails, actions}: Readonly<CourseCatalogCardProps>) {
     const title = course.title || "Titre de la formation";
     const author = course.author ?? "Auteur";
-    const price = formatPrice(course.price ?? null);
+    const price = formatPriceFromCents(course.price ?? null);
 
     return (
         <article className="flex flex-col">

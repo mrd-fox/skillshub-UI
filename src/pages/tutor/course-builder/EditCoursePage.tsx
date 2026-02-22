@@ -22,6 +22,7 @@ import {Button} from "@/components/ui/button.tsx";
 import {courseService} from "@/api/services";
 import {toast} from "sonner";
 import {useNavigate} from "react-router-dom";
+import {centsToEurosString, formatPriceFromCents, parsePriceEurosToCents} from "@/lib/price";
 
 type VideoStatus = string | null | undefined;
 
@@ -334,6 +335,47 @@ export default function EditCoursePage() {
                                 });
                             }}
                         />
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                            <Label htmlFor="course-price">{t("tutor.price_euros")}</Label>
+                            <Input
+                                id="course-price"
+                                data-cy="course-price"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={centsToEurosString(course.price ?? null)}
+                                disabled={!canEditInfo}
+                                onChange={(e) => {
+                                    const inputValue = e.target.value;
+                                    const priceCents = parsePriceEurosToCents(inputValue);
+
+                                    if (priceCents !== null && priceCents < 0) {
+                                        toast.error(t("tutor.price_negative_error"));
+                                        return;
+                                    }
+
+                                    setCourse((prev) => {
+                                        if (!prev) {
+                                            return prev;
+                                        }
+                                        return {
+                                            ...prev,
+                                            price: priceCents,
+                                        };
+                                    });
+                                }}
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>{t("tutor.price")}</Label>
+                            <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm font-semibold">
+                                {formatPriceFromCents(course.price ?? null)}
+                            </div>
+                        </div>
                     </div>
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

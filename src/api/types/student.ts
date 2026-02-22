@@ -16,6 +16,8 @@ export type CourseSummaryResponse = {
     title: string;
     description: string;
     status: "PUBLISHED";
+    author?: string | null;
+    price?: number | null; // cents
     createdAt: string;
     updatedAt: string;
 };

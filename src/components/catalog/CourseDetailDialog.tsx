@@ -9,6 +9,7 @@ import {Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTi
 import {SkeletonLoader} from "@/components/ui/SkeletonLoader";
 import {PublicChapterResponse, PublicCourseDetailResponse, PublicSectionResponse} from "@/api/types/public";
 import {Button} from "@/components/ui/button";
+import {formatPriceFromCents} from "@/lib/price";
 
 interface CourseDetailDialogProps {
     course: PublicCourseDetailResponse | null;
@@ -26,17 +27,6 @@ interface OutlineSection {
 
 interface OutlineChapter {
     title: string;
-}
-
-function formatPrice(priceCents: number | null | undefined): string {
-    if (priceCents === null || priceCents === undefined) {
-        return "—";
-    }
-    if (priceCents === 0) {
-        return "Gratuit";
-    }
-    const euros = priceCents / 100;
-    return euros.toLocaleString("fr-FR", {style: "currency", currency: "EUR"});
 }
 
 function sortByPosition<T extends { position: number }>(items: T[]): T[] {
@@ -121,7 +111,7 @@ export function CourseDetailDialog({
                             )}
 
                             <div className="text-base font-semibold">
-                                {formatPrice(course?.price ?? null)}
+                                {formatPriceFromCents(course?.price ?? null)}
                             </div>
                         </div>
 

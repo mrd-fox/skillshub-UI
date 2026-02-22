@@ -8,11 +8,18 @@ import {Input} from "@/components/ui/input";
 import {Textarea} from "@/components/ui/textarea";
 import {toast} from "sonner";
 import {useNavigate} from "react-router-dom";
+import {parsePriceEurosToCents} from "@/lib/price";
 
 const createCourseSchema = (t: (key: string) => string) => z.object({
     title: z.string().min(3, t("tutor.form_title_required")),
     description: z.string().min(10, t("tutor.form_description_required")),
-    price: z.number().min(0, t("tutor.form_price_positive")),
+    priceInput: z.string().refine((val) => {
+        if (val.trim() === "" || val.trim() === "0") {
+            return true;
+        }
+        const cents = parsePriceEurosToCents(val);
+        return cents !== null && cents >= 0;
+    }, t("tutor.form_price_positive")),
     sections: z.array(
         z.object({
             title: z.string().min(1, t("tutor.form_section_title_required")),
@@ -34,7 +41,7 @@ export default function CreateCourseForm({sections}: { sections: any[] }) {
     const [form, setForm] = useState<CoursePayload>({
         title: "",
         description: "",
-        price: 0,
+        priceInput: "",
         sections: [],
     });
     const navigate = useNavigate();
@@ -61,7 +68,26 @@ export default function CreateCourseForm({sections}: { sections: any[] }) {
         }
 
         try {
-            const createdCourse = await courseService.createCourse(payload);
+            const priceCents = parsePriceEurosToCents(form.priceInput);
+
+            if (priceCents === null) {
+                setErrors({priceInput: t("tutor.form_price_positive")});
+                return;
+            }
+
+            if (priceCents < 0) {
+                setErrors({priceInput: t("tutor.price_negative_error")});
+                return;
+            }
+
+            const apiPayload = {
+                title: form.title,
+                description: form.description,
+                price: priceCents,
+                sections,
+            };
+
+            const createdCourse = await courseService.createCourse(apiPayload);
             toast.success(t("tutor.course_created_success"));
             navigate(`/dashboard/tutor/course-builder/${createdCourse.id}`, {
                 state: {course: createdCourse},
@@ -100,13 +126,12 @@ export default function CreateCourseForm({sections}: { sections: any[] }) {
             <div className="space-y-2">
                 <label className="font-medium text-sm">{t("tutor.form_price_label")}</label>
                 <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={form.price}
-                    onChange={(e) => handleChange("price", Number(e.target.value))}
+                    type="text"
+                    placeholder="0"
+                    value={form.priceInput}
+                    onChange={(e) => handleChange("priceInput", e.target.value)}
                 />
-                {errors["price"] && <p className="text-sm text-red-600">{errors["price"]}</p>}
+                {errors["priceInput"] && <p className="text-sm text-red-600">{errors["priceInput"]}</p>}
             </div>
 
             <Button type="submit" className="w-full !bg-[#2A6AEE] !text-white hover:!bg-[#1f57ca]">

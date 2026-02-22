@@ -2,21 +2,14 @@ import {useEffect, useMemo, useState} from "react";
 import {useNavigate} from "react-router-dom";
 import {useTranslation} from "react-i18next";
 import api from "@/api/axios";
+import {CourseListItem, CourseStatus} from "@/api/types/course";
+import {formatPriceFromCents} from "@/lib/price";
 
 // shadcn/ui
 import {Card, CardContent, CardHeader} from "@/components/ui/card";
 import {Badge} from "@/components/ui/badge";
 import {Skeleton} from "@/components/ui/skeleton";
 import {Button} from "@/components/ui/button";
-
-type CourseStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED" | "PROCESSING" | "READY";
-
-type CourseListItem = {
-    id: string;
-    title?: string;
-    status: CourseStatus;
-    updatedAt?: string;
-};
 
 type ApiError = {
     status: number;
@@ -235,6 +228,14 @@ function CourseCard(props: {
 
                     {props.disabled ? <Skeleton className="h-3 w-1/2"/> :
                         <div className="text-xs text-muted-foreground">{updatedLabel}</div>}
+
+                    {props.disabled ? (
+                        <Skeleton className="h-4 w-20"/>
+                    ) : (
+                        <div className="text-sm font-semibold text-primary">
+                            {formatPriceFromCents(props.course.price ?? null)}
+                        </div>
+                    )}
                 </div>
 
                 <div className="space-y-2">

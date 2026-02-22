@@ -16,8 +16,8 @@ function mapSummaryToListItem(summary: CourseSummaryResponse): PublicCourseListI
     return {
         id: summary.id,
         title: summary.title,
-        author: null,
-        price: null,
+        author: summary.author ?? null,
+        price: summary.price ?? null,
     };
 }
 

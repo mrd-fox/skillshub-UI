@@ -1,93 +1,174 @@
-# e-learning-front
+# Skillshub Frontend – Docker Execution Guide
 
+This document describes how to run the **Skillshub Frontend** using Docker, depending on where the **Gateway** service
+is executed.  
+It provides two Docker Compose configurations for local development and full Docker integration.
 
+---
 
-## Getting started
+## 1. Overview
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+The frontend is always executed inside a Docker container.  
+Only the Gateway location changes depending on the development mode.
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+| Mode                    | Frontend | Gateway   | Keycloak | Typical Use                                       |
+|-------------------------|----------|-----------|----------|---------------------------------------------------|
+| **Local Gateway Mode**  | Docker   | Localhost | Docker   | Debugging the Gateway locally                     |
+| **Docker Gateway Mode** | Docker   | Docker    | Docker   | Full integration testing on shared Docker network |
 
-## Add your files
+---
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+## 2. Folder Structure
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/dardemarina/e-learning-front.git
-git branch -M main
-git push -uf origin main
+frontend/
+│
+├─ docker-compose.local.yml
+├─ docker-compose.docker.yml
+├─ Dockerfile.dev
+└─ env/
+   └─ dev/
+       ├─ local-gateway.env
+       └─ docker-gateway.env
 ```
 
-## Integrate with your tools
+Each mode uses its own `.env` file located under `env/dev/`.  
+These files define runtime variables.
 
-- [ ] [Set up project integrations](https://gitlab.com/dardemarina/e-learning-front/-/settings/integrations)
+---
 
-## Collaborate with your team
+## 3. Prerequisites
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+Before starting the containers, ensure the shared Docker network exists.  
+This network is required when the Gateway also runs in Docker.
 
-## Test and Deploy
+if required network doesn't created execute this
 
-Use the built-in continuous integration in GitLab.
+```bash
+docker network create skillshub-net
+```
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+You can check existing networks with:
 
-***
+```bash
+docker network ls
+```
 
-# Editing this README
+---
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+## 4. Execution Modes
 
-## Suggestions for a good README
+### 4.1 Local Gateway Mode
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+In this mode, the frontend runs in Docker, while the Gateway runs locally on the host machine.
 
-## Name
-Choose a self-explaining name for your project.
+**Purpose:**  
+Use this configuration when actively debugging or modifying the Gateway code on localhost.
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+**Command:**
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+```bash
+docker compose -f docker-compose.local.yml up --build
+```
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+**Compose file:**  
+`docker-compose.local.yml`  
+This configuration does not attach the container to the shared Docker network.
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+---
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+### 4.2 Docker Gateway Mode
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+In this mode, both the frontend and the Gateway run inside Docker and communicate through the shared network
+`skillshub-net`.
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+**Purpose:**  
+Use this configuration for end-to-end testing or integration validation in a full Docker environment.
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+**Command:**
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+```bash
+docker compose -f docker-compose.docker.yml up --build
+```
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+**Compose file:**  
+`docker-compose.docker.yml`  
+This configuration attaches the frontend container to the shared `skillshub-net` network.
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+---
 
-## License
-For open source projects, say how it is licensed.
+## 5. Stopping Containers
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+To stop and remove running containers:
+
+```bash
+docker compose -f docker-compose.local.yml down
+# or
+docker compose -f docker-compose.docker.yml down
+```
+
+If you need to clean up all unused containers, networks, and images:
+
+```bash
+docker system prune -f
+```
+
+---
+
+## 6. Summary
+
+| Mode           | Compose File                | Network           | Use Case                        |
+|----------------|-----------------------------|-------------------|---------------------------------|
+| Local Gateway  | `docker-compose.local.yml`  | None (local only) | Debug Gateway locally           |
+| Docker Gateway | `docker-compose.docker.yml` | `skillshub-net`   | Run full integrated environment |
+
+---
+
+## 7. Troubleshooting
+
+### Network not found
+
+If you see an error like:
+
+```
+Error: network skillshub-net not found
+```
+
+Create it manually:
+
+```bash
+docker network create skillshub-net
+```
+
+### Port already in use
+
+If you encounter:
+
+```
+Bind for 0.0.0.0:5173 failed: port is already allocated
+```
+
+Stop the process using that port or change the exposed port in your `docker-compose` file.
+
+### Environment variables not applied
+
+Ensure each compose file correctly references the appropriate `.env` file under `env/dev/`.  
+You can verify active environment variables inside the container with:
+
+```bash
+docker exec -it skillshub-front-dev printenv
+```
+
+---
+
+## 8. Notes
+
+- The `.env` files are only used to define runtime URLs and environment context.
+- Do **not** store credentials or tokens in these files.
+- Both Docker Compose configurations can coexist in the same repository for easy switching between modes.
+- This setup ensures predictable, isolated frontend behavior in both local and full Docker environments.
+
+---
+
+**Maintained by:** Skillshub Project  
+**Last Updated:** November 2025

@@ -1,0 +1,27 @@
+networks:
+  skillshub-net:
+    external: true
+services:
+  skillshub-front-dev:
+    build:
+      context: .
+      dockerfile: dev.Dockerfile
+
+    container_name: skillshub-front-dev
+
+    working_dir: /app
+
+    volumes:
+      - .:/app
+      - /app/node_modules
+
+    ports:
+      - "5173:5173"
+
+    env_file:
+      - ./env/dev/local-gateway.env
+
+    command: [ "npm", "run", "dev" ]
+
+    networks:
+      - skillshub-net

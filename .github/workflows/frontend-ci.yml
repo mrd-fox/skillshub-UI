@@ -264,7 +264,7 @@ jobs:
   docker_image:
     name: Docker Image (build • smoke • push GHCR)
     runs-on: ubuntu-latest
-    needs: [ build, unit, cypress ]
+    needs: [ build, unit, cypress, sonar ]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:

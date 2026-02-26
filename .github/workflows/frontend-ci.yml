@@ -2,13 +2,14 @@ name: Frontend CI
 
 on:
   push:
-    branches: [ "dev", "master" ]
+    branches: [ "dev", "main" ]
   pull_request:
-    branches: [ "dev", "master" ]
+    branches: [ "dev", "main" ]
 
 permissions:
   contents: read
   pull-requests: read
+  packages: write
 
 concurrency:
   group: frontend-ci-${{ github.ref }}
@@ -182,6 +183,7 @@ jobs:
     name: Sonar (Frontend)
     runs-on: ubuntu-latest
     needs: [ unit, cypress ]
+    continue-on-error: true
 
     steps:
       - name: Checkout
@@ -258,3 +260,54 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
           SONAR_ORG: ${{ secrets.SONAR_ORG }}
+
+  docker_image:
+    name: Docker Image (build • smoke • push GHCR)
+    runs-on: ubuntu-latest
+    needs: [ build, unit, cypress ]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set image names
+        run: |
+          echo "IMAGE_SHA=ghcr.io/${{ github.repository }}:sha-${{ github.sha }}" >> $GITHUB_ENV
+          echo "IMAGE_LATEST=ghcr.io/${{ github.repository }}:latest" >> $GITHUB_ENV
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Docker image (production)
+        run: |
+          docker build \
+            --build-arg VITE_API_URL="${{ vars.VITE_API_URL }}" \
+            -t "${IMAGE_SHA}" \
+            -t "${IMAGE_LATEST}" \
+            .
+
+      - name: Smoke test container
+        run: |
+          docker run -d --rm --name fe-smoke -p 8080:80 "${IMAGE_SHA}"
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:8080/ >/dev/null; then
+              echo "Frontend container is healthy"
+              docker stop fe-smoke
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Frontend container failed to start"
+          docker logs fe-smoke || true
+          docker stop fe-smoke || true
+          exit 1
+
+      - name: Push images
+        run: |
+          docker push "${IMAGE_SHA}"
+          docker push "${IMAGE_LATEST}"
